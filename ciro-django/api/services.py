@@ -2,7 +2,7 @@ import os
 import json
 import requests
 import google.generativeai as genai
-from duckduckgo_search import DDGS
+from ddgs import DDGS
 from django.conf import settings
 import typing_extensions as typing
 
@@ -38,7 +38,7 @@ def search_youtube(query: str) -> dict:
     try:
         with DDGS() as ddgs:
             search_query = f"site:youtube.com Pakistan {query}"
-            for r in ddgs.text(keywords=search_query, timelimit='d', max_results=5):
+            for r in ddgs.text(query=search_query, timelimit='d', max_results=5):
                 results.append({"title": r.get("title"), "snippet": r.get("body")})
     except Exception as e:
         print(f"DDG YouTube search failed: {e}")
@@ -74,7 +74,7 @@ def search_reddit(query: str) -> dict:
     try:
         with DDGS() as ddgs:
             search_query = f"site:reddit.com {query}"
-            for r in ddgs.text(keywords=search_query, timelimit='d', max_results=5):
+            for r in ddgs.text(query=search_query, timelimit='d', max_results=5):
                 results.append({"title": r.get("title"), "snippet": r.get("body")})
     except Exception as e:
         print(f"DDG Reddit search failed: {e}")
@@ -89,7 +89,7 @@ def search_telegram(query: str) -> dict:
     try:
         with DDGS() as ddgs:
             search_query = f"site:t.me {query}"
-            for r in ddgs.text(keywords=search_query, timelimit='d', max_results=5):
+            for r in ddgs.text(query=search_query, timelimit='d', max_results=5):
                 results.append({"title": r.get("title"), "snippet": r.get("body")})
     except Exception as e:
         print(f"DDG Telegram search failed: {e}")
@@ -123,7 +123,7 @@ def search_google(query: str) -> dict:
     print("Falling back to general DuckDuckGo search")
     try:
         with DDGS() as ddgs:
-            for r in ddgs.text(keywords=query, timelimit='d', max_results=5):
+            for r in ddgs.text(query=query, timelimit='d', max_results=5):
                 results.append({"title": r.get("title"), "snippet": r.get("body")})
     except Exception as e:
         print(f"DDG search failed: {e}")
