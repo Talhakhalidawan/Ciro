@@ -36,10 +36,10 @@ def search_youtube(query: str) -> dict:
     # Fallback to DuckDuckGo Search
     print("Falling back to DuckDuckGo for YouTube search")
     try:
-        ddgs = DDGS()
-        search_query = f"site:youtube.com Pakistan {query}"
-        for r in ddgs.text(search_query, max_results=5):
-            results.append({"title": r["title"], "snippet": r["body"]})
+        with DDGS() as ddgs:
+            search_query = f"site:youtube.com Pakistan {query}"
+            for r in ddgs.text(keywords=search_query, timelimit='d', max_results=5):
+                results.append({"title": r.get("title"), "snippet": r.get("body")})
     except Exception as e:
         print(f"DDG YouTube search failed: {e}")
         
@@ -72,10 +72,10 @@ def search_reddit(query: str) -> dict:
     # Fallback
     print("Falling back to DuckDuckGo for Reddit search")
     try:
-        ddgs = DDGS()
-        search_query = f"site:reddit.com {query}"
-        for r in ddgs.text(search_query, max_results=5):
-            results.append({"title": r["title"], "snippet": r["body"]})
+        with DDGS() as ddgs:
+            search_query = f"site:reddit.com {query}"
+            for r in ddgs.text(keywords=search_query, timelimit='d', max_results=5):
+                results.append({"title": r.get("title"), "snippet": r.get("body")})
     except Exception as e:
         print(f"DDG Reddit search failed: {e}")
         
@@ -87,10 +87,10 @@ def search_telegram(query: str) -> dict:
     results = []
     print("Using DuckDuckGo for Telegram search (no public HTTP search API available without auth)")
     try:
-        ddgs = DDGS()
-        search_query = f"site:t.me {query}"
-        for r in ddgs.text(search_query, max_results=5):
-            results.append({"title": r["title"], "snippet": r["body"]})
+        with DDGS() as ddgs:
+            search_query = f"site:t.me {query}"
+            for r in ddgs.text(keywords=search_query, timelimit='d', max_results=5):
+                results.append({"title": r.get("title"), "snippet": r.get("body")})
     except Exception as e:
         print(f"DDG Telegram search failed: {e}")
         
@@ -122,9 +122,9 @@ def search_google(query: str) -> dict:
     # Fallback to general DuckDuckGo Search
     print("Falling back to general DuckDuckGo search")
     try:
-        ddgs = DDGS()
-        for r in ddgs.text(query, max_results=5):
-            results.append({"title": r["title"], "snippet": r["body"]})
+        with DDGS() as ddgs:
+            for r in ddgs.text(keywords=query, timelimit='d', max_results=5):
+                results.append({"title": r.get("title"), "snippet": r.get("body")})
     except Exception as e:
         print(f"DDG search failed: {e}")
         
