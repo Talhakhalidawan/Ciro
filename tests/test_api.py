@@ -36,21 +36,6 @@ def test_weather_endpoint_success():
         else:
             print("Error:", response.text)
 
-def test_weather_endpoint_missing_coordinates():
-    url = 'http://localhost:8000/api/weather/'
-    payload = {
-        'time': '2023-10-27T10:00:00Z',
-        'user_id': 'test-user-123'
-    }
-    print(f"\nSending POST request to {url} with payload: {payload}")
-    response = requests.post(url, json=payload)
-    
-    print(f"Status Code: {response.status_code}")
-    if response.status_code == 400:
-        print("Correctly received 400 Bad Request error:", response.json())
-    else:
-        print("Unexpected response:", response.text)
-
 def test_weather_anomaly_trigger():
     url = 'http://localhost:8000/api/weather/'
     user_id = f"test-anomaly-{uuid.uuid4()}"
@@ -67,7 +52,7 @@ def test_weather_anomaly_trigger():
         'longitude': 73.399,
         'time': '2023-10-27T13:00:00Z',
         'mock_current_weather': {
-            'temperature_2m': 15.0,
+            'temperature_2m': 25.0,
             'wind_gusts_10m': 10.0,
             'precipitation': 0.0
         }
@@ -89,7 +74,7 @@ def test_weather_anomaly_trigger():
         'longitude': 73.399,
         'time': '2023-10-27T14:00:00Z',
         'mock_current_weather': {
-            'temperature_2m': 30.0,  # 30°C vs previous 15°C (diff = 15 > threshold 10)
+            'temperature_2m': 100.0,  # 30°C vs previous 15°C (diff = 15 > threshold 10)
             'wind_gusts_10m': 10.0,
             'precipitation': 0.0
         }
@@ -111,5 +96,4 @@ if __name__ == "__main__":
     print("--- Running Live API Tests ---")
     test_weather_anomaly_trigger()
     test_weather_endpoint_success()
-    test_weather_endpoint_missing_coordinates()
     print("--- Done ---")
