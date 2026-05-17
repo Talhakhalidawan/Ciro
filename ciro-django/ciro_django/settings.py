@@ -116,3 +116,11 @@ USE_TZ = True
 # https://docs.djangoproject.com/en/6.0/howto/static-files/
 
 STATIC_URL = 'static/'
+
+import os
+GEMINI_API_KEY = os.environ.get('GEMINI_API_KEY', "AIzaSyA_r-yuYiBJTTUm5g1Rv16PwK8q6Vfya0k")
+YOUTUBE_API_KEY = os.environ.get('YOUTUBE_API_KEY', None)
+REDDIT_CLIENT_ID = os.environ.get('REDDIT_CLIENT_ID', None)
+REDDIT_CLIENT_SECRET = os.environ.get('REDDIT_CLIENT_SECRET', None)
+GOOGLE_API_KEY = os.environ.get('GOOGLE_API_KEY', None)
+GOOGLE_CX = os.environ.get('GOOGLE_CX', None)
