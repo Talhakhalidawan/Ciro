@@ -140,7 +140,7 @@ def analyze_with_ai(weather_diff: str, search_results: dict) -> dict:
         return {"error": "GEMINI_API_KEY not configured."}
         
     genai.configure(api_key=api_key)
-    model = genai.GenerativeModel("gemini-1.5-pro")
+    model = genai.GenerativeModel("gemini-2.5-flash-lite")
     
     prompt = f"""
     You are an intelligent safety analysis assistant.
