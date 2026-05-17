@@ -3,6 +3,8 @@ import requests
 from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_POST
+from api.models import WeatherRequest
+from django.utils.dateparse import parse_datetime
 
 @csrf_exempt
 @require_POST
@@ -28,6 +30,16 @@ def weather_view(request):
         response = requests.get(url, params=params)
         if response.status_code == 200:
             weather_data = response.json()
+            
+            # Save to database
+            parsed_time = parse_datetime(user_time) if user_time else None
+            WeatherRequest.objects.create(
+                latitude=lat,
+                longitude=lon,
+                user_time=parsed_time,
+                weather_data=weather_data
+            )
+            
             return JsonResponse({
                 'status': 'success',
                 'user_time_received': user_time,
