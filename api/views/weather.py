@@ -70,6 +70,11 @@ def weather_view(request):
         weather_data = response.json()
         current = weather_data.get('current', {})
 
+        # Allow mocking of current weather values for testing anomalies
+        mock_current = data.get('mock_current_weather')
+        if mock_current:
+            current.update(mock_current)
+
         # Save to database
         parsed_time = parse_datetime(user_time) if user_time else None
         new_request = WeatherRequest.objects.create(
