@@ -152,9 +152,68 @@ def test_firms_anomaly_trigger():
     else:
         print("Request failed:", response2.text)
 
+def test_tomtom_anomaly_trigger():
+    url = 'http://localhost:8000/api/weather/'
+    user_id = f"test-tomtom-{uuid.uuid4()}"
+
+    print(f"\n==========================================")
+    print(f"TESTING TOMTOM ROAD INCIDENTS FOR USER: {user_id}")
+    print(f"==========================================")
+
+    # 1. Baseline (no incidents)
+    print("\n--- 1. Establishing normal baseline (no road incidents) ---")
+    payload1 = {
+        'user_id': user_id,
+        'city_name': 'Islamabad',
+        'sector': 'G-10',
+        'latitude': 33.684,
+        'longitude': 73.048,
+        'time': '2023-10-27T13:00:00Z',
+        'mock_current_weather': {
+            'temperature_2m': 30.0,
+            'tomtom_incidents_count': 0,
+            'tomtom_incidents_summary': []
+        }
+    }
+    response1 = requests.post(url, json=payload1)
+    print(f"Baseline Status Code: {response1.status_code}")
+
+    # 2. Trigger with mocked road incidents
+    print("\n--- 2. Sending request with mocked TomTom road incidents ---")
+    payload2 = {
+        'user_id': user_id,
+        'city_name': 'Islamabad',
+        'sector': 'G-10',
+        'latitude': 33.684,
+        'longitude': 73.048,
+        'time': '2023-10-27T14:00:00Z',
+        'mock_current_weather': {
+            'temperature_2m': 30.0,
+            'tomtom_incidents_count': 2,
+            'tomtom_incidents_summary': [
+                {"category": "RoadClosed", "description": "Road closed due to flooding", "from": "G-10 Markaz", "to": "G-9 Interchange", "delay": "Major delay"},
+                {"category": "Accident", "description": "Multi-vehicle accident", "from": "G-10/1", "to": "IJP Road", "delay": "Moderate delay"}
+            ]
+        }
+    }
+    response2 = requests.post(url, json=payload2)
+    print(f"Anomaly Status Code: {response2.status_code}")
+    if response2.status_code == 200:
+        data = response2.json()
+        print("Server Response Status:", data.get('status'))
+        print("Traffic Incidents in Response:", json.dumps(data.get('traffic_incidents', {}), indent=2))
+        if 'ai_analysis' in data:
+            print("\n🚨 SUCCESS! TOMTOM ROAD INCIDENT AI ANOMALY TRIGGERED!")
+            print(json.dumps(data['ai_analysis'], indent=2, ensure_ascii=False))
+        else:
+            print("❌ FAILURE: No AI analysis returned for TomTom road incident.")
+    else:
+        print("Request failed:", response2.text)
+
 if __name__ == "__main__":
     print("--- Running Live API Tests ---")
     test_weather_anomaly_trigger()
     test_firms_anomaly_trigger()
+    test_tomtom_anomaly_trigger()
     test_weather_endpoint_success()
     print("--- Done ---")

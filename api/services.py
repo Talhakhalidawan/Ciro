@@ -165,25 +165,29 @@ def generate_search_keywords(weather_diff: str, city: str = "", sector: str = ""
 # AI Analyzer (simplified, location‑aware)
 # ──────────────────────────────────────────────
 
-def analyze_with_ai(weather_diff: str, search_results: dict) -> dict:
+def analyze_with_ai(weather_diff: str, search_results: dict, traffic_incidents: list = None) -> dict:
+    traffic_section = ""
+    if traffic_incidents:
+        traffic_section = f"\n    Active road incidents detected by TomTom nearby:\n    {json.dumps(traffic_incidents, indent=2)}\n"
+
     prompt = f"""
-    You are a safety assistant for people in Pakistan. A weather anomaly has been reported.
+    You are a safety assistant for people in Pakistan. An environmental anomaly has been reported.
 
     {weather_diff}
-
+{traffic_section}
     Additional online reports we found:
     {json.dumps(search_results, indent=2)}
 
-    Based on this, decide if there is a crisis (heatwave, flood, dust storm, smog, etc.) and give a short safety assessment.
+    Based on this, decide if there is a crisis (heatwave, flood, dust storm, smog, road accident, road blockage, etc.) and give a short safety assessment.
 
     Return a JSON object with exactly these fields:
     {{
-      "type": "heatwave|heavy_rainfall|monsoon|flood|cold_wave|fog_smog|dust_storm|severe_wind|safe",
+      "type": "heatwave|heavy_rainfall|monsoon|flood|cold_wave|fog_smog|dust_storm|severe_wind|road_incident|safe",
       "severity": "high|medium|low|none",
       "confidence": "high|medium|low",
       "title": "very short crisis title (max 7 words)",
       "details": "brief summary (max 40 words) of what is happening and what it means for that location",
-      "safety_advises": ["practical, location‑specific safety tip (max 10 words each)", ...],
+      "safety_advises": ["practical, location-specific safety tip (max 10 words each)", ...],
       "help_resources": ["Service Name - Number (e.g., Rescue 1122 - 1122)", ...],
       "notification_details": {{
         "type": "weather_alert|info|safe",
@@ -199,7 +203,7 @@ def analyze_with_ai(weather_diff: str, search_results: dict) -> dict:
       * Rescue 1122 - 1122
       * Edhi Ambulance - 115
       * Fire Brigade - 16
-      * Islamabad Police Women Helpline - 1815
+      * Police Women Helpline - 1815
       * IGP Complaint Helpline - 1787
       * NDMA - 051-111-157-157
       * KP Tourism Helpline - 1422
@@ -223,8 +227,8 @@ def analyze_with_ai(weather_diff: str, search_results: dict) -> dict:
             "115": "Edhi Ambulance - 115",
             "fire brigade": "Fire Brigade - 16",
             "16": "Fire Brigade - 16",
-            "women helpline": "Islamabad Police Women Helpline - 1815",
-            "1815": "Islamabad Police Women Helpline - 1815",
+            "women helpline": "Police Women Helpline - 1815",
+            "1815": "Police Women Helpline - 1815",
             "igp complaint": "IGP Complaint Helpline - 1787",
             "1787": "IGP Complaint Helpline - 1787",
             "national disaster": "NDMA - 051-111-157-157",

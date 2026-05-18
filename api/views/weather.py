@@ -17,12 +17,14 @@ from api.services import (
 
 def is_weather_unusual(current_data, previous_request, city_name=None, sector=None):
     """
-    Checks if the current weather is significantly different from the previous.
+    Checks if the current weather/environment is significantly different from the previous.
     Returns a string detailing the difference if unusual, else None.
     Thresholds:
     - Temperature rise > 5 degrees C
     - Rain for two consecutive readings (precipitation > 0)
     - AQI jumped by more than 50 points
+    - NASA FIRMS thermal anomalies detected > 0
+    - TomTom road incidents (Accident/RoadClosed/Flooding etc.) detected > 0
     """
     if not previous_request:
         return None
@@ -49,6 +51,21 @@ def is_weather_unusual(current_data, previous_request, city_name=None, sector=No
     firms_fires = current_data.get('firms_fires_detected', 0)
     if firms_fires > 0:
         return f"{area_str}, NASA FIRMS detected {firms_fires} active thermal anomalies/fires nearby."
+
+    tomtom_count = current_data.get('tomtom_incidents_count', 0)
+    if tomtom_count > 0:
+        incidents = current_data.get('tomtom_incidents_summary', [])
+        # Build a concise summary of the most severe incidents (up to 3)
+        top_incidents = incidents[:3]
+        summaries = []
+        for inc in top_incidents:
+            cat = inc.get('category', '')
+            desc = inc.get('description', '')
+            delay = inc.get('delay', '')
+            parts = [p for p in [cat, desc, delay] if p]
+            summaries.append(", ".join(parts))
+        incidents_text = "; ".join(summaries) if summaries else f"{tomtom_count} incident(s)"
+        return f"{area_str}, TomTom detected {tomtom_count} active road incident(s): {incidents_text}."
 
     return None
 
@@ -127,6 +144,60 @@ def weather_view(request):
             except Exception as e:
                 print(f"NASA FIRMS fetch failed: {e}")
 
+        # ── Fetch Road Incidents from TomTom Traffic API ──────────
+        tomtom_incidents_count = 0
+        tomtom_incidents_summary = []
+        tomtom_key = getattr(settings, 'MYTOMTOM_API_KEY', None)
+        if tomtom_key:
+            try:
+                # Bounding box ~11km x 11km around coordinate (same as FIRMS)
+                tt_lon_min, tt_lat_min = lon - 0.1, lat - 0.1
+                tt_lon_max, tt_lat_max = lon + 0.1, lat + 0.1
+                bbox_str = f"{tt_lon_min},{tt_lat_min},{tt_lon_max},{tt_lat_max}"
+
+                # Fields we care about for the AI prompt
+                fields = "{incidents{type,properties{id,iconCategory,magnitudeOfDelay,events{description,iconCategory},from,to,roadNumbers,timeValidity}}}"
+
+                # Filter to incidents that matter: Accident, DangerousConditions, RoadClosed, LaneClosed, RoadWorks, Flooding
+                category_filter = "1,3,7,8,9,11"
+
+                tomtom_url = "https://api.tomtom.com/traffic/services/5/incidentDetails"
+                tomtom_params = {
+                    "key": tomtom_key,
+                    "bbox": bbox_str,
+                    "fields": fields,
+                    "language": "en-GB",
+                    "categoryFilter": category_filter,
+                    "timeValidityFilter": "present"
+                }
+                tt_resp = requests.get(tomtom_url, params=tomtom_params, timeout=10)
+                if tt_resp.status_code == 200:
+                    tt_data = tt_resp.json()
+                    incidents = tt_data.get("incidents", [])
+                    tomtom_incidents_count = len(incidents)
+                    for inc in incidents:
+                        props = inc.get("properties", {})
+                        events = props.get("events", [])
+                        desc = events[0].get("description", "") if events else ""
+                        category = props.get("iconCategory", "Unknown")
+                        from_road = props.get("from", "")
+                        to_road = props.get("to", "")
+                        delay = props.get("magnitudeOfDelay", 0)  # 0=unknown,1=minor,2=moderate,3=major,4=undefined
+                        delay_label = {0: "Unknown delay", 1: "Minor delay", 2: "Moderate delay", 3: "Major delay", 4: "Undefined delay"}.get(delay, "")
+                        summary_entry = {
+                            "category": category,
+                            "description": desc.replace("#", ""),
+                            "from": from_road,
+                            "to": to_road,
+                            "delay": delay_label
+                        }
+                        tomtom_incidents_summary.append(summary_entry)
+                    print(f"TomTom: {tomtom_incidents_count} road incident(s) detected near {city_name or lat}")
+                else:
+                    print(f"TomTom API returned {tt_resp.status_code}: {tt_resp.text[:200]}")
+            except Exception as e:
+                print(f"TomTom traffic fetch failed: {e}")
+
         # Allow mock overrides (for testing)
         mock_current = data.get('mock_current_weather')
         if mock_current:
@@ -135,9 +206,15 @@ def weather_view(request):
                 aqi = mock_current['aqi']
             if 'firms_fires_detected' in mock_current:
                 firms_fires_detected = mock_current['firms_fires_detected']
+            if 'tomtom_incidents_count' in mock_current:
+                tomtom_incidents_count = mock_current['tomtom_incidents_count']
+            if 'tomtom_incidents_summary' in mock_current:
+                tomtom_incidents_summary = mock_current['tomtom_incidents_summary']
 
         current['aqi'] = aqi
         current['firms_fires_detected'] = firms_fires_detected
+        current['tomtom_incidents_count'] = tomtom_incidents_count
+        current['tomtom_incidents_summary'] = tomtom_incidents_summary
 
         # ── Save to DB ────────────────────────────────────────────
         parsed_time = parse_datetime(user_time) if user_time else None
@@ -150,6 +227,8 @@ def weather_view(request):
             sector=sector,
             aqi=aqi,
             firms_fires_detected=firms_fires_detected,
+            tomtom_incidents_count=tomtom_incidents_count,
+            tomtom_incidents_summary=tomtom_incidents_summary,
             temperature_2m=current.get('temperature_2m'),
             relative_humidity_2m=current.get('relative_humidity_2m'),
             apparent_temperature=current.get('apparent_temperature'),
@@ -235,7 +314,7 @@ def weather_view(request):
                     )
 
             # 4. Send to AI
-            ai_data = analyze_with_ai(anomaly_diff, search_results_dict)
+            ai_data = analyze_with_ai(anomaly_diff, search_results_dict, traffic_incidents=tomtom_incidents_summary or None)
             if "error" not in ai_data:
                 ai_response = ai_data["response_json"]
                 AIResponseLog.objects.create(
@@ -257,6 +336,11 @@ def weather_view(request):
                 'wind_gusts_10m': current.get('wind_gusts_10m'),
                 'weather_code': current.get('weather_code'),
                 'aqi': aqi,
+                'firms_fires_detected': firms_fires_detected,
+            },
+            'traffic_incidents': {
+                'count': tomtom_incidents_count,
+                'incidents': tomtom_incidents_summary
             },
             'weather': weather_data
         }
