@@ -118,6 +118,15 @@ USE_TZ = True
 STATIC_URL = 'static/'
 
 import os
+
+env_path = BASE_DIR / '.env'
+if env_path.exists():
+    with open(env_path, 'r') as f:
+        for line in f:
+            if '=' in line and not line.startswith('#'):
+                k, v = line.strip().split('=', 1)
+                os.environ[k.strip()] = v.strip('\'" ')
+
 GEMINI_API_KEY = os.environ.get('GEMINI_API_KEY', None)
 YOUTUBE_API_KEY = os.environ.get('YOUTUBE_API_KEY', None)
 REDDIT_CLIENT_ID = os.environ.get('REDDIT_CLIENT_ID', None)

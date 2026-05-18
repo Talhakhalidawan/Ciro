@@ -6,6 +6,11 @@ class WeatherRequest(models.Model):
     longitude = models.FloatField()
     user_time = models.DateTimeField(null=True, blank=True)
     
+    # Localized area details
+    city_name = models.CharField(max_length=255, null=True, blank=True)
+    sector = models.CharField(max_length=255, null=True, blank=True)
+    aqi = models.IntegerField(null=True, blank=True)
+    
     # Weather fields
     temperature_2m = models.FloatField(null=True, blank=True)
     relative_humidity_2m = models.FloatField(null=True, blank=True)

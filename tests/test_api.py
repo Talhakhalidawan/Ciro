@@ -9,13 +9,15 @@ def test_weather_endpoint_success():
     user_id = str(uuid.uuid4())
     
     dummy_locations = [
-        {'user_id': 'user3', 'latitude': 32.384332172219864, 'longitude': 73.39963776224754, 'time': '2023-10-27T13:00:00Z'}
+        {'user_id': 'user3', 'city_name': 'Islamabad', 'sector': 'G-10', 'latitude': 32.384332172219864, 'longitude': 73.39963776224754, 'time': '2023-10-27T13:00:00Z'}
     ]
     
     for loc in dummy_locations:
-        print(f"\n--- Testing location: {loc['user_id']} ---")
+        print(f"\n--- Testing location: {loc['user_id']} ({loc['city_name']}) ---")
         payload = {
             'user_id': user_id,
+            'city_name': loc['city_name'],
+            'sector': loc['sector'],
             'latitude': loc['latitude'],
             'longitude': loc['longitude'],
             'time': loc['time']
@@ -45,38 +47,44 @@ def test_weather_anomaly_trigger():
     print(f"==========================================")
     
     # 1. Send normal baseline request using mock weather to make sure it's stable
-    print("\n--- 1. Establishing normal weather baseline (15°C) ---")
+    print("\n--- 1. Establishing normal weather baseline (34°C in Islamabad G-10) ---")
     payload1 = {
         'user_id': user_id,
-        'latitude': 32.384,
-        'longitude': 73.399,
+        'city_name': 'Islamabad',
+        'sector': 'G-10',
+        'latitude': 33.684,
+        'longitude': 73.048,
         'time': '2023-10-27T13:00:00Z',
         'mock_current_weather': {
-            'temperature_2m': 25.0,
+            'temperature_2m': 34.0,
             'wind_gusts_10m': 10.0,
-            'precipitation': 0.0
+            'precipitation': 0.0,
+            'aqi': 80
         }
     }
     response1 = requests.post(url, json=payload1)
     print(f"Baseline Status Code: {response1.status_code}")
     if response1.status_code == 200:
         data = response1.json()
-        print("Baseline saved. Current Temp:", data['weather']['current']['temperature_2m'], "°C")
+        print("Baseline saved. Current Temp:", data['weather']['current']['temperature_2m'], "°C, AQI:", data['weather_details'].get('aqi'))
     else:
         print("Baseline failed:", response1.text)
         return
         
-    # 2. Send request with mocked drastic weather change (temperature jump of 15°C)
-    print("\n--- 2. Sending request with sudden temperature jump (+15°C) ---")
+    # 2. Send request with mocked drastic weather change (temperature rise to 41°C)
+    print("\n--- 2. Sending request with realistic anomaly temperature (41°C, rise of +7°C) ---")
     payload2 = {
         'user_id': user_id,
-        'latitude': 32.384,
-        'longitude': 73.399,
+        'city_name': 'Islamabad',
+        'sector': 'G-10',
+        'latitude': 33.684,
+        'longitude': 73.048,
         'time': '2023-10-27T14:00:00Z',
         'mock_current_weather': {
-            'temperature_2m': 100.0,  # 30°C vs previous 15°C (diff = 15 > threshold 10)
+            'temperature_2m': 41.0,  # 41°C vs previous 34°C (rise of 7 > threshold 5)
             'wind_gusts_10m': 10.0,
-            'precipitation': 0.0
+            'precipitation': 0.0,
+            'aqi': 80
         }
     }
     response2 = requests.post(url, json=payload2)

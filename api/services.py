@@ -14,7 +14,7 @@ def search_youtube(query: str) -> dict:
         url = "https://www.googleapis.com/youtube/v3/search"
         params = {
             "part": "snippet",
-            "q": f"Pakistan {query}",
+            "q": query,
             "type": "video",
             "order": "date",
             "maxResults": 5,
@@ -37,7 +37,7 @@ def search_youtube(query: str) -> dict:
     print("Falling back to DuckDuckGo for YouTube search")
     try:
         with DDGS() as ddgs:
-            search_query = f"site:youtube.com Pakistan {query}"
+            search_query = f"site:youtube.com {query}"
             for r in ddgs.text(query=search_query, region='pk-en', timelimit='d', max_results=5):
                 results.append({"title": r.get("title"), "snippet": r.get("body")})
     except Exception as e:
@@ -51,9 +51,6 @@ def search_reddit(query: str) -> dict:
     results = []
     
     if client_id and client_secret:
-        # Simplistic reddit API search without auth if possible, or basic auth
-        # Usually Reddit requires OAuth, but public endpoints might work with a custom user agent.
-        # This is a placeholder for actual OAuth flow. We'll use public JSON endpoint.
         url = f"https://www.reddit.com/search.json?q={query}&sort=new&limit=5"
         headers = {'User-Agent': 'python:ciro_django_app:v1.0 (by /u/developer)'}
         try:
@@ -80,21 +77,6 @@ def search_reddit(query: str) -> dict:
         print(f"DDG Reddit search failed: {e}")
         
     return {"platform": "reddit", "results": results}
-
-def search_telegram(query: str) -> dict:
-    # Telegram doesn't have a simple public search API for messages without a bot/user client.
-    # We will rely exclusively on DuckDuckGo fallback for web-indexed Telegram channels.
-    results = []
-    print("Using DuckDuckGo for Telegram search (no public HTTP search API available without auth)")
-    try:
-        with DDGS() as ddgs:
-            search_query = f"site:t.me {query}"
-            for r in ddgs.text(query=search_query, region='pk-en', timelimit='d', max_results=5):
-                results.append({"title": r.get("title"), "snippet": r.get("body")})
-    except Exception as e:
-        print(f"DDG Telegram search failed: {e}")
-        
-    return {"platform": "telegram", "results": results}
 
 def search_google(query: str) -> dict:
     api_key = getattr(settings, 'GOOGLE_API_KEY', None)
@@ -197,41 +179,37 @@ def analyze_with_ai(weather_diff: str, search_results: dict) -> dict:
     model = genai.GenerativeModel("gemini-2.5-flash-lite")
     
     prompt = f"""
-    You are an intelligent safety analysis assistant specialized in Pakistan's environment.
-    The local weather in Pakistan has experienced a sudden, unusual change.
-    Weather Change Summary: {weather_diff}
+    You are an intelligent safety analysis assistant specialized in Pakistan.
+    The weather has changed suddenly.
     
-    To gather more context, we performed parallel searches across multiple platforms.
-    Here are the results:
+    Situation: {weather_diff}
+    
+    Search reports:
     {json.dumps(search_results, indent=2)}
     
-    Based on this data, assess if there is a dangerous situation (e.g., flood, storm, heatwave, smog, power outage riot, etc.).
+    Analyze the situation and determine if there is an active crisis (e.g. heatwave, flood, dust storm, smog, etc.). 
+    Provide highly localized advice considering the user's specific city/sector if mentioned in the situation (e.g., "Avoid Kashmir Highway underpass" instead of "Stay indoors").
+    
     You MUST respond with a JSON object exactly matching this schema:
     {{
       "type": "heatwave|heavy_rainfall|monsoon|flood|cold_wave|fog_smog|dust_storm|severe_wind|safe",
       "severity": "high|medium|low|none",
       "confidence": "high|medium|low",
-      "title": "String (Short summary, max 5-7 words)",
-      "details": "String (Extremely concise summary of the situation in Pakistan, MAX 45 words)",
-      "safety_advises": ["String (Realistic advice for Pakistan, max 10 words)", "String (max 10 words)"],
-      "help_resources": ["String (Format: '[Service Name] [Number]', e.g., 'Rescue 1122')", "String"],
+      "title": "String (Short summary, max 7 words)",
+      "details": "String (Very brief summary of the situation, max 40 words)",
+      "safety_advises": ["String (Practical localized safety advice)", "String"],
+      "help_resources": ["String (Format: '[Service Name] - [Number]', e.g., 'Rescue 1122 - 1122')"],
       "notification_details": {{
         "type": "weather_alert|info|safe",
-        "title": "String (Very short notification title, MAX 35 characters)",
-        "details": "String (Concise notification body, MAX 80 characters)"
+        "title": "String (Short title for mobile notification, max 35 chars)",
+        "details": "String (Concise body for mobile notification, max 80 chars)"
       }}
     }}
     
     Rules:
-    1. "type" MUST be selected ONLY from this list: ["heatwave", "heavy_rainfall", "monsoon", "flood", "cold_wave", "fog_smog", "dust_storm", "severe_wind", "safe"]. Do not use any other types.
-    2. "details" MUST be half of the usual length (MAX 45 words). Keep it extremely punchy and direct.
-    3. "safety_advises" MUST contain 2-4 highly realistic, simple safety actions tailored to Pakistan.
-    4. "help_resources" MUST list actual, direct Pakistani emergency numbers (e.g., "Rescue 1122", "Police 15", "Motorway Police 130", "NDMA 1110", "PDMA Punjab 1700") relevant to the situation. Do not list generic text.
-    5. "notification_details.title" MUST be super short (MAX 35 chars) so it fits in a mobile notification header.
-    6. "notification_details.details" MUST be super short (MAX 80 chars) so it fits in a mobile push notification.
-    7. If nothing seems dangerous, set type to "safe" and severity to "none".
-    
-    Respond ONLY with the JSON object, nothing else. No markdown formatting blocks around it.
+    - If nothing seems dangerous, set type to "safe" and severity to "none".
+    - "help_resources" must list direct emergency numbers (e.g., "Rescue 1122 - 1122", "Police 15 - 15", "NDMA - 1110").
+    - Respond ONLY with the JSON object, nothing else. No markdown formatting.
     """
     
     try:
