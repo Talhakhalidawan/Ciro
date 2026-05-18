@@ -46,6 +46,10 @@ def is_weather_unusual(current_data, previous_request, city_name=None, sector=No
     if abs(current_aqi - prev_aqi) > 50:
         return f"{area_str}, AQI jumped drastically from {prev_aqi} to {current_aqi}."
 
+    firms_fires = current_data.get('firms_fires_detected', 0)
+    if firms_fires > 0:
+        return f"{area_str}, NASA FIRMS detected {firms_fires} active thermal anomalies/fires nearby."
+
     return None
 
 
@@ -105,14 +109,35 @@ def weather_view(request):
         except Exception as e:
             print(f"Air quality fetch failed: {e}")
 
+        # ── Fetch Thermal Anomalies (Fires) from NASA FIRMS ───────
+        firms_fires_detected = 0
+        from django.conf import settings
+        firms_key = getattr(settings, 'NASA_FIRMS_MAP_KEY', None)
+        if firms_key:
+            try:
+                # Bounding box roughly 11km x 11km around coordinate
+                lon_min, lat_min = lon - 0.1, lat - 0.1
+                lon_max, lat_max = lon + 0.1, lat + 0.1
+                firms_url = f"https://firms.modaps.eosdis.nasa.gov/api/area/csv/{firms_key}/VIIRS_SNPP_NRT/{lon_min},{lat_min},{lon_max},{lat_max}/1"
+                firms_resp = requests.get(firms_url, timeout=10)
+                if firms_resp.status_code == 200:
+                    lines = firms_resp.text.strip().split("\n")
+                    if len(lines) > 1: # Header + data rows
+                        firms_fires_detected = len(lines) - 1
+            except Exception as e:
+                print(f"NASA FIRMS fetch failed: {e}")
+
         # Allow mock overrides (for testing)
         mock_current = data.get('mock_current_weather')
         if mock_current:
             current.update(mock_current)
             if 'aqi' in mock_current:
                 aqi = mock_current['aqi']
+            if 'firms_fires_detected' in mock_current:
+                firms_fires_detected = mock_current['firms_fires_detected']
 
         current['aqi'] = aqi
+        current['firms_fires_detected'] = firms_fires_detected
 
         # ── Save to DB ────────────────────────────────────────────
         parsed_time = parse_datetime(user_time) if user_time else None
@@ -124,6 +149,7 @@ def weather_view(request):
             city_name=city_name,
             sector=sector,
             aqi=aqi,
+            firms_fires_detected=firms_fires_detected,
             temperature_2m=current.get('temperature_2m'),
             relative_humidity_2m=current.get('relative_humidity_2m'),
             apparent_temperature=current.get('apparent_temperature'),

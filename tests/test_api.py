@@ -100,8 +100,61 @@ def test_weather_anomaly_trigger():
     else:
         print("Request failed:", response2.text)
 
+def test_firms_anomaly_trigger():
+    url = 'http://localhost:8000/api/weather/'
+    user_id = f"test-firms-{uuid.uuid4()}"
+    
+    print(f"\n==========================================")
+    print(f"TESTING FIRMS ANOMALY TRIGGER FOR USER: {user_id}")
+    print(f"==========================================")
+    
+    # 1. Send normal baseline request
+    print("\n--- 1. Establishing normal baseline (No fires) ---")
+    payload1 = {
+        'user_id': user_id,
+        'city_name': 'Islamabad',
+        'sector': 'Margalla Hills',
+        'latitude': 33.74,
+        'longitude': 73.05,
+        'time': '2023-10-27T13:00:00Z',
+        'mock_current_weather': {
+            'temperature_2m': 30.0,
+            'firms_fires_detected': 0
+        }
+    }
+    response1 = requests.post(url, json=payload1)
+    print(f"Baseline Status Code: {response1.status_code}")
+    
+    # 2. Send request with mocked FIRMS fires
+    print("\n--- 2. Sending request with mocked FIRMS thermal anomaly (5 fires) ---")
+    payload2 = {
+        'user_id': user_id,
+        'city_name': 'Islamabad',
+        'sector': 'Margalla Hills',
+        'latitude': 33.74,
+        'longitude': 73.05,
+        'time': '2023-10-27T14:00:00Z',
+        'mock_current_weather': {
+            'temperature_2m': 30.0,
+            'firms_fires_detected': 5  # Anomaly trigger
+        }
+    }
+    response2 = requests.post(url, json=payload2)
+    print(f"Anomaly Status Code: {response2.status_code}")
+    if response2.status_code == 200:
+        data = response2.json()
+        print("Server Response Status:", data.get('status'))
+        if 'ai_analysis' in data:
+            print("\n🚨 SUCCESS! NASA FIRMS AI ANOMALY TRIGGERED!")
+            print(json.dumps(data['ai_analysis'], indent=2, ensure_ascii=False))
+        else:
+            print("❌ FAILURE: No AI analysis returned for FIRMS anomaly.")
+    else:
+        print("Request failed:", response2.text)
+
 if __name__ == "__main__":
     print("--- Running Live API Tests ---")
     test_weather_anomaly_trigger()
+    test_firms_anomaly_trigger()
     test_weather_endpoint_success()
     print("--- Done ---")
