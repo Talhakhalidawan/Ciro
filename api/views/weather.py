@@ -103,10 +103,24 @@ def weather_view(request):
         ai_response = None
 
         if anomaly_diff:
+            # 1. Generate highly specific English/Roman Urdu search keywords
+            from api.services import generate_search_keywords
+            keywords_data = generate_search_keywords(anomaly_diff)
+            keywords_list = keywords_data.get("keywords", ["weather anomaly Pakistan"])
+            query = " ".join(keywords_list)
+            print(f"Generated search query for anomaly: {query}")
+            
+            # Log generated keywords to DB
+            from api.models import AnomalyKeywordLog
+            AnomalyKeywordLog.objects.create(
+                weather_request=new_request,
+                keywords_english=keywords_data.get("keywords_english", []),
+                keywords_roman_urdu=keywords_data.get("keywords_roman_urdu", [])
+            )
+            
             # Spawn parallel tasks
             search_results_dict = {}
             with ThreadPoolExecutor(max_workers=4) as executor:
-                query = "weather anomaly emergency"
                 future_yt = executor.submit(search_youtube, query)
                 future_rd = executor.submit(search_reddit, query)
                 future_tg = executor.submit(search_telegram, query)

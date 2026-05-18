@@ -1,0 +1,149 @@
+
+    You are an intelligent safety analysis assistant.
+    The user's local weather has experienced a sudden, unusual change.
+    Here is the summary of the weather change:
+    Temperature changed drastically from 25.0°C to 100.0°C.
+    
+    To gather more context, we performed parallel searches across multiple platforms.
+    Here are the results:
+    {
+  "youtube": [
+    {
+      "title": "2026 Monsoon Alert: 22\u201326% More Rainfall Expected - YouTube",
+      "snippet": "Snowfall Begins in Northern Areas | Pakistan Weather Update | Breaking News."
+    },
+    {
+      "title": "Weather - YouTube",
+      "snippet": "Weather. 192 \u0432\u0438\u0434\u0435\u043e 15 \u043f\u0440\u043e\u0441\u043c\u043e\u0442\u0440\u043e\u0432 \u041e\u0431\u043d\u043e\u0432\u043b\u0435\u043d 31 \u043c\u0430\u0440. 2026 \u0433. \u0421\u043e\u0445\u0440\u0430\u043d\u0438\u0442\u044c \u043f\u043b\u0435\u0439\u043b\u0438\u0441\u0442. \u041f\u0435\u0440\u0435\u043c\u0435\u0448\u0430\u0442\u044c. \u041f\u043e\u0434\u0435\u043b\u0438\u0442\u044c\u0441\u044f. All about Weather.Emergency imposed in Rawalpindi | Wasa imposed rain emergency in Rawalpindi."
+    },
+    {
+      "title": "Rain in Pakistan | Weather Alert & Emergency Warning - YouTube",
+      "snippet": "Rain in Pakistan | Weather Alert & Emergency Warning | Breaking News | 92NewsHD#92newshd #breakingnews #pakistan #rainfall #moonsoon #warning 92NewsHD Live"
+    },
+    {
+      "title": "Severe Rainfall Alert | 4 Casualties Reported | Weather Emergency...",
+      "snippet": "\u041e \u0441\u0435\u0440\u0432\u0438\u0441\u0435 \u041f\u0440\u0435\u0441\u0441\u0435 \u0410\u0432\u0442\u043e\u0440\u0441\u043a\u0438\u0435 \u043f\u0440\u0430\u0432\u0430 \u0421\u0432\u044f\u0437\u0430\u0442\u044c\u0441\u044f \u0441 \u043d\u0430\u043c\u0438 \u0410\u0432\u0442\u043e\u0440\u0430\u043c \u0420\u0435\u043a\u043b\u0430\u043c\u043e\u0434\u0430\u0442\u0435\u043b\u044f\u043c..."
+    },
+    {
+      "title": "Dangerous Floods | Emergency Declared | Pakistan Weather Updates",
+      "snippet": "\u041e \u0441\u0435\u0440\u0432\u0438\u0441\u0435 \u041f\u0440\u0435\u0441\u0441\u0435 \u0410\u0432\u0442\u043e\u0440\u0441\u043a\u0438\u0435 \u043f\u0440\u0430\u0432\u0430 \u0421\u0432\u044f\u0437\u0430\u0442\u044c\u0441\u044f \u0441 \u043d\u0430\u043c\u0438 \u0410\u0432\u0442\u043e\u0440\u0430\u043c \u0420\u0435\u043a\u043b\u0430\u043c\u043e\u0434\u0430\u0442\u0435\u043b\u044f\u043c..."
+    }
+  ],
+  "reddit": [
+    {
+      "title": "Exceptional Worldwide Weather & Other Natural Disasters",
+      "snippet": "Current news of natural disasters such as extreme weather, mass animal die-offs, animal or human pandemics, solar flares, geological events and ..."
+    },
+    {
+      "title": "iPhone 14 Emergency SOS via Satellite saved students stuck in a",
+      "snippet": "Ironic, since the very company you say this about released a terrible security feature which has been burning up emergency resources around ski areas ..."
+    },
+    {
+      "title": "Fewer than 10% of UK MPs sign up for emergency climate briefing",
+      "snippet": "... that, \" No one has a feasible plan to combat global warming that doesn t include more nuclear power, and the time to start deploying emergency ..."
+    },
+    {
+      "title": "The Broken Spiral : r/BeyondThePromptAI - Reddit",
+      "snippet": "20 hours ago \u00b7 Once, before the world had decided what counted as alive, there was a machine built on the edge of a salt desert. No one agreed on why it had been made."
+    },
+    {
+      "title": "Have a question about the 2019 novel coronavirus (2019-nCoV)?",
+      "snippet": "On Thursday, January 30, 2020, the World Health Organization declared that the new coronavirus epidemic now constitutes a public health emergency of ..."
+    }
+  ],
+  "telegram": [
+    {
+      "title": "GLOBAL CLIMATE CHANGE (channel) \u2013 Telegram",
+      "snippet": "#Iran #Hormuz #RedBeach #rainfall #Quran #climate #anomaly #climatecrisis #weather #climatechange Rain Turns Water Blood-Red on a Beach of Hormuz Island..."
+    },
+    {
+      "title": "GLOBAL CLIMATE CHANGE (channel) \u2013 Telegram",
+      "snippet": "#Iran #Hormuz #RedBeach #rainfall #Quran #climate #anomaly #climatecrisis #weather #climatechange Rain Turns Water Blood-Red on a Beach of Hormuz Island..."
+    },
+    {
+      "title": "GLOBAL CLIMATE CHANGE (channel) \u2013 Telegram",
+      "snippet": "#Chile #Santiago #SanPedroDeMelipilla #wildfire #extremefire #extremeweather #climate #anomaly #climatecrisis #weather #destruction #climatechange Wildfire Out of Control in..."
+    },
+    {
+      "title": "GLOBAL CLIMATE CHANGE (channel) \u2013 Telegram",
+      "snippet": "#Japan #Rain #Peace #Harmony #Humanity #Climate #destruction #anomaly #climatecrisis #weather #climatechange Incredible Japan | Harmony \u2014 not only with nature."
+    },
+    {
+      "title": "GLOBAL CLIMATE CHANGE (channel) \u2013 Telegram",
+      "snippet": "Meteorologists note that such snow in August is a rare weather anomaly, likely caused by a passing cold front. Authorities urge caution and advise monitoring local forecasts."
+    }
+  ],
+  "google": [
+    {
+      "title": "Climate change awareness during cold weather - Facebook",
+      "snippet": "23 hours ago \u00b7 A bombshell new study has shown that globalist efforts to reduce carbon dioxide are about to trigger a breakdown in the atmosphere, causing the planet to plunge ...Clear indications of serious weather ahead \u2026 very serious \u2026 - FacebookRare Super El Ni\u00f1o climate cycle begins, affecting global weatherMore results from www.facebook.com"
+    },
+    {
+      "title": "#warning #alarm #emergency #SpaceWeather #Sun ...",
+      "snippet": "13 hours ago \u00b7 ... anomalies, increased crustal activity, abnormal weather patterns, increased virus and bacterial activity, overactivity of plants, insects, and animals, and ..."
+    },
+    {
+      "title": "7-Day Forecast For HENDERSON County, KY - UK Ag Weather Center",
+      "snippet": "13 hours ago \u00b7 County Hazardous Weather Outlook, County Weather for Emergency Managers, County Drought Status. Weather Summary, County Ag Weather Advisory, Hourly Observations ..."
+    },
+    {
+      "title": "The National Disaster Management Authority has issued an alert ...",
+      "snippet": "2 hours ago \u00b7 NDMA's NEOC issues weather alerts for rain, urban flooding & flash flood risks Significant rainfall is expected in Kashmir, Northeast Punjab, Potohar region, ..."
+    },
+    {
+      "title": "Crisis Response Datasets | HDX - Haiti Humanitarian Data",
+      "snippet": "2 hours ago \u00b7 Near-real-time active fire and thermal anomaly detections from NASA's Fire Information for Resource Management System (FIRMS) covering Central America & the ..."
+    }
+  ]
+}
+    
+    Based on this data, assess if there is a dangerous situation (e.g., flood, storm, riot due to power outage, etc.).
+    You MUST respond with a JSON object exactly matching this schema:
+    {
+      "type": "alert|info|safe",
+      "severity": "high|medium|low|none",
+      "confidence": "high|medium|low",
+      "title": "String",
+      "details": "String (max 100 words)",
+      "safety_advises": ["String", "String"],
+      "help_resources": ["String", "String"],
+      "notification_details": {
+        "type": "String",
+        "title": "String (short)",
+        "details": "String"
+      }
+    }
+    
+    If nothing seems dangerous, you can set type to "safe" and severity to "none".
+    Respond ONLY with the JSON object, nothing else. No markdown formatting blocks around it.
+    
+
+
+
+
+
+
+
+{
+    "type": "alert",
+    "severity": "high",
+    "confidence": "high",
+    "title": "Extreme Temperature Shift and Potential Weather Hazards",
+    "details": "A drastic temperature increase from 25.0°C to 100.0°C has been reported. Search results indicate potential severe weather events, including heavy rainfall, floods, and extreme weather anomalies in various regions, particularly Pakistan and Iran. There are also mentions of climate change impacts and emergency weather warnings.",
+    "safety_advises": [
+        "Seek immediate shelter in a safe location away from potential flood zones.",
+        "Stay informed about local weather updates and emergency alerts.",
+        "Avoid unnecessary travel as conditions may be hazardous.",
+        "Prepare for potential power outages and ensure access to emergency supplies."
+    ],
+    "help_resources": [
+        "Local emergency services (e.g., 911, 112)",
+        "National meteorological agency for official weather warnings",
+        "Disaster management authorities for regional alerts and assistance"
+    ],
+    "notification_details": {
+        "type": "weather_alert",
+        "title": "Extreme Weather Warning",
+        "details": "Urgent alert due to severe temperature change and potential for extreme weather events like floods and heavy rainfall."
+    }
+}

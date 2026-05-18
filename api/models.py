@@ -40,3 +40,12 @@ class AIResponseLog(models.Model):
     prompt = models.TextField()
     response_json = models.JSONField()
     created_at = models.DateTimeField(auto_now_add=True)
+
+class AnomalyKeywordLog(models.Model):
+    weather_request = models.ForeignKey(WeatherRequest, on_delete=models.CASCADE, related_name="keywords")
+    keywords_english = models.JSONField(default=list)
+    keywords_roman_urdu = models.JSONField(default=list)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return f"Keywords for request {self.weather_request.id}"

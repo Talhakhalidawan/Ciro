@@ -118,7 +118,7 @@ USE_TZ = True
 STATIC_URL = 'static/'
 
 import os
-GEMINI_API_KEY = os.environ.get('GEMINI_API_KEY', None)
+GEMINI_API_KEY = os.environ.get('GEMINI_API_KEY', "AIzaSyAqAlvyLjMMw-ghUEoO75gepjSs9pON3Yw")
 YOUTUBE_API_KEY = os.environ.get('YOUTUBE_API_KEY', None)
 REDDIT_CLIENT_ID = os.environ.get('REDDIT_CLIENT_ID', None)
 REDDIT_CLIENT_SECRET = os.environ.get('REDDIT_CLIENT_SECRET', None)

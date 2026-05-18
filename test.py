@@ -1,9 +1,8 @@
 from ddgs import DDGS
 
-query = "site:x.com gemini"
+query = "'weather' site:reddit.com"
 
 with DDGS() as ddgs:
-    # timelimit='d' filters for the past 24 hours
     results = ddgs.text(
         query=query, 
         timelimit='d', 
@@ -12,4 +11,5 @@ with DDGS() as ddgs:
     
     for result in results:
         print(f"Title: {result.get('title')}")
+        print(f"Description: {result.get('body')}")
         print(f"URL: {result.get('href')}\n")
