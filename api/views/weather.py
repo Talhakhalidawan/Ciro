@@ -7,12 +7,9 @@ from api.models import WeatherRequest, SearchLog, AIResponseLog
 from django.utils.dateparse import parse_datetime
 from concurrent.futures import ThreadPoolExecutor
 from api.services import (
-    search_youtube,
-    search_x,
-    search_facebook,
-    search_tiktok,
+    smart_search_platform,
     analyze_with_ai,
-    generate_search_keywords
+    generate_ranked_queries
 )
 
 def is_weather_unusual(current_data, previous_request, city_name=None, sector=None):
@@ -254,67 +251,57 @@ def weather_view(request):
         ai_response = None
 
         if anomaly_diff:
-            # 1. Generate location‑aware keywords (fixes Hindi issue)
-            keywords_data = generate_search_keywords(
+            # 1. Generate ranked search queries (best → worst, location-aware)
+            ranked_queries = generate_ranked_queries(
                 anomaly_diff,
                 city=city_name,
                 sector=sector
             )
-            keywords_list = keywords_data.get("keywords", ["weather anomaly Pakistan"])
+            print(f"Ranked queries ({len(ranked_queries)}): {ranked_queries}")
 
-            # Build the combined search query (still used as a seed)
-            query = " ".join(keywords_list)
-            print(f"Generated search query for anomaly: {query}")
-
-            # Log keywords
+            # Log keywords to DB
             from api.models import AnomalyKeywordLog
             AnomalyKeywordLog.objects.create(
                 weather_request=new_request,
-                keywords_english=keywords_data.get("keywords_english", []),
-                keywords_roman_urdu=keywords_data.get("keywords_roman_urdu", [])
+                keywords_english=ranked_queries,
+                keywords_roman_urdu=[]
             )
 
-            # 2. Build the location string that will be prepended to all searches
-            location_str = ""
-            if city_name:
-                location_str = city_name
-                if sector:
-                    location_str += f" {sector}"
-            # Fallback if no location given
-            if not location_str:
-                location_str = "Pakistan"
+            # 2. Per-platform smart search: try ranked queries in order
+            #    until useful results are found or list is exhausted.
+            #    Run all 4 platforms in parallel for speed.
+            platforms = ["youtube", "x", "facebook", "tiktok"]
+            search_results_dict = {}   # platform -> {query_used, results}
 
-            # 3. Parallel searches with location prepended
-            search_results_dict = {}
             with ThreadPoolExecutor(max_workers=4) as executor:
-                future_yt = executor.submit(search_youtube, query, location_str)
-                future_x = executor.submit(search_x, query, location_str)
-                future_fb = executor.submit(search_facebook, query, location_str)
-                future_tk = executor.submit(search_tiktok, query, location_str)
+                futures = {
+                    executor.submit(smart_search_platform, p, ranked_queries): p
+                    for p in platforms
+                }
+                for future in futures:
+                    platform = futures[future]
+                    try:
+                        res = future.result()
+                        search_results_dict[platform] = {
+                            "query_used": res["query_used"],
+                            "results":    res["results"]
+                        }
+                        SearchLog.objects.create(
+                            weather_request=new_request,
+                            platform=platform,
+                            query=res["query_used"],
+                            results=res["results"]
+                        )
+                    except Exception as e:
+                        print(f"Search failed for {platform}: {e}")
+                        search_results_dict[platform] = {"query_used": "", "results": []}
 
-                for future in [future_yt, future_x, future_fb, future_tk]:
-                    res = future.result()
-                    platform = res['platform']
-                    
-                    # Clean '#' characters from results to prevent markdown parser / hashing issues in LLM prompts
-                    cleaned_results = []
-                    for item in res.get('results', []):
-                        cleaned_results.append({
-                            "title": item.get("title", "").replace("#", ""),
-                            "snippet": item.get("snippet", "").replace("#", "")
-                        })
-                    
-                    search_results_dict[platform] = cleaned_results
-
-                    SearchLog.objects.create(
-                        weather_request=new_request,
-                        platform=platform,
-                        query=f"{location_str} {query}" if location_str else query,
-                        results=cleaned_results
-                    )
-
-            # 4. Send to AI
-            ai_data = analyze_with_ai(anomaly_diff, search_results_dict, traffic_incidents=tomtom_incidents_summary or None)
+            # 3. Send to AI for analysis + top_posts selection
+            ai_data = analyze_with_ai(
+                anomaly_diff,
+                search_results_dict,
+                traffic_incidents=tomtom_incidents_summary or None
+            )
             if "error" not in ai_data:
                 ai_response = ai_data["response_json"]
                 AIResponseLog.objects.create(
@@ -323,30 +310,46 @@ def weather_view(request):
                     response_json=ai_response
                 )
 
-        # ── Final response ────────────────────────────────────────
+        # ── Build lean, mobile-ready response ─────────────────────
         final_response = {
             'status': 'success',
-            'user_time_received': user_time,
-            'weather_details': {
-                'temperature_2m': current.get('temperature_2m'),
-                'relative_humidity_2m': current.get('relative_humidity_2m'),
-                'apparent_temperature': current.get('apparent_temperature'),
-                'precipitation': current.get('precipitation'),
-                'wind_speed_10m': current.get('wind_speed_10m'),
-                'wind_gusts_10m': current.get('wind_gusts_10m'),
-                'weather_code': current.get('weather_code'),
-                'aqi': aqi,
-                'firms_fires_detected': firms_fires_detected,
+            # Core environmental snapshot
+            'environment': {
+                'temperature_c':       current.get('temperature_2m'),
+                'feels_like_c':        current.get('apparent_temperature'),
+                'humidity_pct':        current.get('relative_humidity_2m'),
+                'precipitation_mm':    current.get('precipitation'),
+                'wind_speed_kmh':      current.get('wind_speed_10m'),
+                'wind_gusts_kmh':      current.get('wind_gusts_10m'),
+                'weather_code':        current.get('weather_code'),
+                'aqi':                 aqi,
+                'active_fires_nearby': firms_fires_detected,
             },
-            'traffic_incidents': {
-                'count': tomtom_incidents_count,
-                'incidents': tomtom_incidents_summary
-            },
-            'weather': weather_data
+            # Road incidents (always present so app can show live traffic)
+            'traffic': {
+                'incident_count': tomtom_incidents_count,
+                'incidents':      tomtom_incidents_summary
+            }
         }
 
+        # Alert block — only added when there is an actual crisis
         if ai_response and ai_response.get('type') != 'safe':
-            final_response['ai_analysis'] = ai_response
+            notif = ai_response.get('notification_details', {})
+            final_response['alert'] = {
+                'type':          ai_response.get('type'),
+                'severity':      ai_response.get('severity'),
+                'confidence':    ai_response.get('confidence'),
+                'title':         ai_response.get('title'),
+                'details':       ai_response.get('details'),
+                'safety_advises':  ai_response.get('safety_advises', []),
+                'help_resources':  ai_response.get('help_resources', []),
+                'notification': {
+                    'type':  notif.get('type', 'weather_alert'),
+                    'title': notif.get('title', ''),
+                    'body':  notif.get('body', notif.get('details', ''))
+                },
+                'top_posts': ai_response.get('top_posts', [])
+            }
 
         return JsonResponse(final_response, json_dumps_params={'ensure_ascii': False})
 
