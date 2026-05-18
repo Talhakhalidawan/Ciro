@@ -34,6 +34,7 @@ def _print_response(data):
                 print(f"     [{tp.get('platform')}] query='{tp.get('query')}'")
                 for item in (tp.get('items') or [])[:2]:
                     print(f"       • {item.get('title','')[:80]}")
+                    print(f"         Link: {item.get('url', 'None')}")
         else:
             print("  📰 top_posts: [] (no relevant social posts found)")
     elif data.get('status') == 'success':

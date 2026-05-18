@@ -27,8 +27,9 @@ def _ddgs_search(site_filter: str, query: str, max_results: int = 5) -> list:
             ):
                 title   = _clean(r.get("title", ""))
                 snippet = _clean(r.get("body", ""))
+                url     = r.get("href", "")
                 if title or snippet:
-                    results.append({"title": title, "snippet": snippet})
+                    results.append({"title": title, "snippet": snippet, "url": url})
     except Exception as e:
         print(f"DDG search failed ({site_filter}): {e}")
     return results
@@ -48,9 +49,12 @@ def search_youtube(query: str) -> dict:
             if r.status_code == 200:
                 for item in r.json().get("items", []):
                     s = item.get("snippet", {})
+                    v_id = item.get("id", {}).get("videoId", "")
+                    url = f"https://www.youtube.com/watch?v={v_id}" if v_id else ""
                     results.append({
                         "title":   _clean(s.get("title", "")),
-                        "snippet": _clean(s.get("description", ""))
+                        "snippet": _clean(s.get("description", "")),
+                        "url":     url
                     })
                 return {"platform": "youtube", "query": query, "results": results}
         except Exception as e:
@@ -273,7 +277,7 @@ Task:
     {{
       "platform": "youtube|x|facebook|tiktok",
       "query": "the search query that found these",
-      "items": [{{"title": "...", "snippet": "..."}}]
+      "items": [{{"title": "...", "snippet": "...", "url": "..."}}]
     }}
   ]
 }}

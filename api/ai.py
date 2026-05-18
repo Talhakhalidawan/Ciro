@@ -38,69 +38,7 @@ def ask_ai(prompt: str, system_instruction: str = None, response_json: bool = Fa
     errors = []
     
     # ──────────────────────────────────────────────
-    # 1. GROQ
-    # ──────────────────────────────────────────────
-    groq_key = get_key('GROQ_API_KEY')
-    if groq_key:
-        try:
-            print("Querying Groq AI...")
-            client = Groq(api_key=groq_key)
-            messages = []
-            if system_instruction:
-                messages.append({"role": "system", "content": system_instruction})
-            messages.append({"role": "user", "content": prompt})
-            
-            params = {
-                "model": "llama-3.3-70b-versatile",
-                "messages": messages,
-                "temperature": 0.3,
-            }
-            if response_json:
-                params["response_format"] = {"type": "json_object"}
-                
-            completion = client.chat.completions.create(**params)
-            res = completion.choices[0].message.content
-            if res:
-                return res
-        except Exception as e:
-            err_msg = f"Groq/Grok failed: {e}"
-            print(err_msg)
-            errors.append(err_msg)
-            
-    # ──────────────────────────────────────────────
-    # 2. BLUESMINDS
-    # ──────────────────────────────────────────────
-    bluesminds_key = get_key('BLUESMINDS_API_KEY')
-    if bluesminds_key:
-        model_candidates = ["gpt-4o", "claude-3-5-sonnet", "meta-llama/llama-3.3-70b-instruct", "llama-3.3-70b"]
-        for model in model_candidates:
-            try:
-                print(f"Querying BluesMinds AI (model: {model})...")
-                client = OpenAI(api_key=bluesminds_key, base_url="https://api.bluesminds.com/v1")
-                messages = []
-                if system_instruction:
-                    messages.append({"role": "system", "content": system_instruction})
-                messages.append({"role": "user", "content": prompt})
-                
-                params = {
-                    "model": model,
-                    "messages": messages,
-                    "temperature": 0.3,
-                }
-                if response_json:
-                    params["response_format"] = {"type": "json_object"}
-                    
-                completion = client.chat.completions.create(**params)
-                res = completion.choices[0].message.content
-                if res:
-                    return res
-            except Exception as e:
-                err_msg = f"BluesMinds ({model}) failed: {e}"
-                print(err_msg)
-                errors.append(err_msg)
-
-    # ──────────────────────────────────────────────
-    # 3. GEMINI
+    # 1. GEMINI
     # ──────────────────────────────────────────────
     gemini_key = get_key('GEMINI_API_KEY')
     if gemini_key:
@@ -131,6 +69,68 @@ def ask_ai(prompt: str, system_instruction: str = None, response_json: bool = Fa
                     return response.text
             except Exception as e:
                 err_msg = f"Gemini ({model_name}) failed: {e}"
+                print(err_msg)
+                errors.append(err_msg)
+
+    # ──────────────────────────────────────────────
+    # 2. GROQ
+    # ──────────────────────────────────────────────
+    groq_key = get_key('GROQ_API_KEY')
+    if groq_key:
+        try:
+            print("Querying Groq AI...")
+            client = Groq(api_key=groq_key)
+            messages = []
+            if system_instruction:
+                messages.append({"role": "system", "content": system_instruction})
+            messages.append({"role": "user", "content": prompt})
+            
+            params = {
+                "model": "llama-3.3-70b-versatile",
+                "messages": messages,
+                "temperature": 0.3,
+            }
+            if response_json:
+                params["response_format"] = {"type": "json_object"}
+                
+            completion = client.chat.completions.create(**params)
+            res = completion.choices[0].message.content
+            if res:
+                return res
+        except Exception as e:
+            err_msg = f"Groq/Grok failed: {e}"
+            print(err_msg)
+            errors.append(err_msg)
+            
+    # ──────────────────────────────────────────────
+    # 3. BLUESMINDS
+    # ──────────────────────────────────────────────
+    bluesminds_key = get_key('BLUESMINDS_API_KEY')
+    if bluesminds_key:
+        model_candidates = ["gpt-4o", "claude-3-5-sonnet", "meta-llama/llama-3.3-70b-instruct", "llama-3.3-70b"]
+        for model in model_candidates:
+            try:
+                print(f"Querying BluesMinds AI (model: {model})...")
+                client = OpenAI(api_key=bluesminds_key, base_url="https://api.bluesminds.com/v1")
+                messages = []
+                if system_instruction:
+                    messages.append({"role": "system", "content": system_instruction})
+                messages.append({"role": "user", "content": prompt})
+                
+                params = {
+                    "model": model,
+                    "messages": messages,
+                    "temperature": 0.3,
+                }
+                if response_json:
+                    params["response_format"] = {"type": "json_object"}
+                    
+                completion = client.chat.completions.create(**params)
+                res = completion.choices[0].message.content
+                if res:
+                    return res
+            except Exception as e:
+                err_msg = f"BluesMinds ({model}) failed: {e}"
                 print(err_msg)
                 errors.append(err_msg)
 
