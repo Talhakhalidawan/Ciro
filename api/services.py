@@ -31,7 +31,12 @@ def _ddgs_search(site_filter: str, query: str, max_results: int = 5) -> list:
                 if title or snippet:
                     results.append({"title": title, "snippet": snippet, "url": url})
     except Exception as e:
-        print(f"DDG search failed ({site_filter}): {e}")
+        err_msg = f"DDG search failed ({site_filter}): {e}"
+        print(err_msg)
+        # Propagate network/connection error to abort smart keyword searches early
+        e_str = str(e)
+        if "ConnectError" in e_str or "connection" in e_str.lower() or "timeout" in e_str.lower() or "rate limit" in e_str.lower():
+            raise ConnectionError(err_msg)
     return results
 
 
@@ -114,14 +119,20 @@ def smart_search_platform(platform: str, ranked_queries: list, min_results: int 
     best = {"platform": platform, "query_used": "", "results": []}
 
     for query in ranked_queries:
-        res = search_fn(query)
-        results = res.get("results", [])
-        print(f"  [{platform}] query='{query}' → {len(results)} result(s)")
-        if len(results) > len(best["results"]):
-            best = {"platform": platform, "query_used": query, "results": results}
-        if _is_useful(results, min_results):
-            print(f"  [{platform}] ✓ Good results — stopping keyword iteration")
-            return {"platform": platform, "query_used": query, "results": results}
+        try:
+            res = search_fn(query)
+            results = res.get("results", [])
+            print(f"  [{platform}] query='{query}' → {len(results)} result(s)")
+            if len(results) > len(best["results"]):
+                best = {"platform": platform, "query_used": query, "results": results}
+            if _is_useful(results, min_results):
+                print(f"  [{platform}] ✓ Good results — stopping keyword iteration")
+                return {"platform": platform, "query_used": query, "results": results}
+        except ConnectionError as ce:
+            print(f"  [{platform}] Network connection failure. Aborting keyword iteration early: {ce}")
+            break
+        except Exception as ex:
+            print(f"  [{platform}] Unexpected search failure: {ex}")
 
     return best
 

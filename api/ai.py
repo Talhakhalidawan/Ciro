@@ -42,7 +42,7 @@ def ask_ai(prompt: str, system_instruction: str = None, response_json: bool = Fa
     # ──────────────────────────────────────────────
     gemini_key = get_key('GEMINI_API_KEY')
     if gemini_key:
-        model_candidates = ["gemini-2.5-flash", "gemini-2.5-flash-lite", "gemini-2.5-pro"]
+        model_candidates = ["gemini-2.5-flash"]
         for model_name in model_candidates:
             try:
                 print(f"Querying Gemini AI (model: {model_name})...")
