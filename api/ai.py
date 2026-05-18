@@ -38,7 +38,7 @@ def ask_ai(prompt: str, system_instruction: str = None, response_json: bool = Fa
     errors = []
     
     # ──────────────────────────────────────────────
-    # 1. GROQ / GROK
+    # 1. GROQ
     # ──────────────────────────────────────────────
     groq_key = get_key('GROQ_API_KEY')
     if groq_key:

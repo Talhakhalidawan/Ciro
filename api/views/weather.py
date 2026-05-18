@@ -8,8 +8,9 @@ from django.utils.dateparse import parse_datetime
 from concurrent.futures import ThreadPoolExecutor
 from api.services import (
     search_youtube,
-    search_reddit,
-    search_google,
+    search_x,
+    search_facebook,
+    search_tiktok,
     analyze_with_ai,
     generate_search_keywords
 )
@@ -180,21 +181,31 @@ def weather_view(request):
 
             # 3. Parallel searches with location prepended
             search_results_dict = {}
-            with ThreadPoolExecutor(max_workers=3) as executor:
+            with ThreadPoolExecutor(max_workers=4) as executor:
                 future_yt = executor.submit(search_youtube, query, location_str)
-                future_rd = executor.submit(search_reddit, query, location_str)
-                future_gg = executor.submit(search_google, query, location_str)
+                future_x = executor.submit(search_x, query, location_str)
+                future_fb = executor.submit(search_facebook, query, location_str)
+                future_tk = executor.submit(search_tiktok, query, location_str)
 
-                for future in [future_yt, future_rd, future_gg]:
+                for future in [future_yt, future_x, future_fb, future_tk]:
                     res = future.result()
                     platform = res['platform']
-                    search_results_dict[platform] = res['results']
+                    
+                    # Clean '#' characters from results to prevent markdown parser / hashing issues in LLM prompts
+                    cleaned_results = []
+                    for item in res.get('results', []):
+                        cleaned_results.append({
+                            "title": item.get("title", "").replace("#", ""),
+                            "snippet": item.get("snippet", "").replace("#", "")
+                        })
+                    
+                    search_results_dict[platform] = cleaned_results
 
                     SearchLog.objects.create(
                         weather_request=new_request,
                         platform=platform,
                         query=f"{location_str} {query}" if location_str else query,
-                        results=res['results']
+                        results=cleaned_results
                     )
 
             # 4. Send to AI

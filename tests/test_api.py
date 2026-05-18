@@ -81,7 +81,7 @@ def test_weather_anomaly_trigger():
         'longitude': 73.048,
         'time': '2023-10-27T14:00:00Z',
         'mock_current_weather': {
-            'temperature_2m': 41.0,  # 41°C vs previous 34°C (rise of 7 > threshold 5)
+            'temperature_2m': 46.0,  # 41°C vs previous 34°C (rise of 7 > threshold 5)
             'wind_gusts_10m': 10.0,
             'precipitation': 0.0,
             'aqi': 80

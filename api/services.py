@@ -35,7 +35,7 @@ def search_youtube(query: str, location: str = "") -> dict:
                 for item in data.get("items", []):
                     results.append({
                         "title": item["snippet"]["title"],
-                        "description": item["snippet"]["description"]
+                        "snippet": item["snippet"]["description"]
                     })
                 return {"platform": "youtube", "results": results}
         except Exception as e:
@@ -54,77 +54,49 @@ def search_youtube(query: str, location: str = "") -> dict:
     return {"platform": "youtube", "results": results}
 
 
-def search_reddit(query: str, location: str = "") -> dict:
+def search_x(query: str, location: str = "") -> dict:
     if location:
         query = f"{location} {query}"
-    client_id = getattr(settings, 'REDDIT_CLIENT_ID', None)
-    client_secret = getattr(settings, 'REDDIT_CLIENT_SECRET', None)
     results = []
-    
-    if client_id and client_secret:
-        url = f"https://www.reddit.com/search.json?q={query}&sort=new&limit=5"
-        headers = {'User-Agent': 'python:ciro_django_app:v1.0 (by /u/developer)'}
-        try:
-            response = requests.get(url, headers=headers, timeout=15)
-            if response.status_code == 200:
-                data = response.json()
-                for item in data.get("data", {}).get("children", []):
-                    results.append({
-                        "title": item["data"]["title"],
-                        "subreddit": item["data"]["subreddit"]
-                    })
-                return {"platform": "reddit", "results": results}
-        except Exception as e:
-            print(f"Reddit API failed: {e}")
-
-    # Fallback
-    print("Falling back to DuckDuckGo for Reddit search")
+    print("Querying DuckDuckGo for X (Twitter) search")
     try:
         with DDGS() as ddgs:
-            search_query = f"site:reddit.com {query}"
+            search_query = f"site:x.com OR site:twitter.com {query}"
             for r in ddgs.text(query=search_query, region='pk-en', timelimit='d', max_results=5):
                 results.append({"title": r.get("title"), "snippet": r.get("body")})
     except Exception as e:
-        print(f"DDG Reddit search failed: {e}")
-        
-    return {"platform": "reddit", "results": results}
+        print(f"DDG X search failed: {e}")
+    return {"platform": "x", "results": results}
 
 
-def search_google(query: str, location: str = "") -> dict:
+def search_facebook(query: str, location: str = "") -> dict:
     if location:
         query = f"{location} {query}"
-    api_key = getattr(settings, 'GOOGLE_API_KEY', None)
-    cx = getattr(settings, 'GOOGLE_CX', None)
     results = []
-    
-    if api_key and cx:
-        url = "https://www.googleapis.com/customsearch/v1"
-        params = {
-            "key": api_key,
-            "cx": cx,
-            "q": query,
-            "num": 5
-        }
-        try:
-            response = requests.get(url, params=params, timeout=15)
-            if response.status_code == 200:
-                data = response.json()
-                for item in data.get("items", []):
-                    results.append({"title": item["title"], "snippet": item["snippet"]})
-                return {"platform": "google", "results": results}
-        except Exception as e:
-            print(f"Google API failed: {e}")
-
-    # Fallback to general DuckDuckGo Search
-    print("Falling back to general DuckDuckGo search")
+    print("Querying DuckDuckGo for Facebook search")
     try:
         with DDGS() as ddgs:
-            for r in ddgs.text(query=query, region='pk-en', timelimit='d', max_results=5):
+            search_query = f"site:facebook.com {query}"
+            for r in ddgs.text(query=search_query, region='pk-en', timelimit='d', max_results=5):
                 results.append({"title": r.get("title"), "snippet": r.get("body")})
     except Exception as e:
-        print(f"DDG search failed: {e}")
-        
-    return {"platform": "google", "results": results}
+        print(f"DDG Facebook search failed: {e}")
+    return {"platform": "facebook", "results": results}
+
+
+def search_tiktok(query: str, location: str = "") -> dict:
+    if location:
+        query = f"{location} {query}"
+    results = []
+    print("Querying DuckDuckGo for TikTok search")
+    try:
+        with DDGS() as ddgs:
+            search_query = f"site:tiktok.com {query}"
+            for r in ddgs.text(query=search_query, region='pk-en', timelimit='d', max_results=5):
+                results.append({"title": r.get("title"), "snippet": r.get("body")})
+    except Exception as e:
+        print(f"DDG TikTok search failed: {e}")
+    return {"platform": "tiktok", "results": results}
 
 
 # ──────────────────────────────────────────────
@@ -133,8 +105,9 @@ def search_google(query: str, location: str = "") -> dict:
 
 def generate_search_keywords(weather_diff: str, city: str = "", sector: str = "") -> dict:
     """
-    Uses Groq/Gemini to create precise, location‑specific search keywords
-    in English and authentic Pakistani Roman Urdu (NOT Hindi).
+    Uses Groq/Gemini to create precise, location‑specific search queries
+    in English and authentic Pakistani Roman Urdu (NOT Hindi) to search the internet
+    to verify/confirm if there's actually a crisis or something bad happening.
     """
     location_str = ""
     if city and sector:
@@ -145,14 +118,18 @@ def generate_search_keywords(weather_diff: str, city: str = "", sector: str = ""
         location_str = "Pakistan"
 
     prompt = f"""
-    You are a local news search assistant in Pakistan.
-    A weather anomaly has been detected in {location_str}.
-    Details: {weather_diff}
+    You are a safety assistant in Pakistan. Here is some weather data for {location_str}:
+    {weather_diff}
     
-    Generate exactly 2 highly specific, short search keywords (2-3 words each) in English and 2 in Roman Urdu (the way a Pakistani would type in Urdu using English letters).
-    Important:
-    - The keywords must include the location "{location_str}" wherever possible.
-    - Use genuine Pakistani Roman Urdu words (e.g., "garmi" for heat, "baarish" for rain, "sylab" for flood, "aandhi" for storm). Never use Hindi words like "taapmaan" or "prakop".
+    I think there's something unusual/bad that I should warn or report the user about.
+    For confirmation, I want you to make precise keywords/queries I can search on DuckDuckGo to verify if there is actually something bad happening right now in {location_str}.
+    
+    Generate exactly 2 highly specific, short search queries (2-3 words each) in English and 2 in Roman Urdu (the way a Pakistani would type in Urdu using English letters).
+    
+    Important rules:
+    - The queries must be highly specific to {location_str} and weather events so they do not return old or unrelated posts. Keep it focused and includes the location.
+    - Use genuine Pakistani Roman Urdu words
+    - Absolutely DO NOT use Hindi words like "taapmaan".
     
     Return ONLY a JSON object of this shape:
     {{
@@ -217,16 +194,67 @@ def analyze_with_ai(weather_diff: str, search_results: dict) -> dict:
 
     Rules:
     - Use the exact city/sector mentioned in the weather anomaly to give localized advice (e.g., "Avoid Kashmir Highway underpass" instead of "Stay indoors").
-    - The "help_resources" must contain real Pakistani emergency numbers: Rescue 1122 - 1122, Police - 15, Motorway Police - 130, NDMA - 1110, PDMA Punjab - 1700. Only list those relevant.
+    - The "help_resources" MUST contain only real, verified Pakistani emergency numbers. Select exclusively from this list:
+      * Police Emergency - 15
+      * Rescue 1122 - 1122
+      * Edhi Ambulance - 115
+      * Fire Brigade - 16
+      * Islamabad Police Women Helpline - 1815
+      * IGP Complaint Helpline - 1787
+      * NDMA - 051-111-157-157
+      * KP Tourism Helpline - 1422
+      Only list those helplines that are directly relevant to the detected weather crisis. Absolutely DO NOT invent or return any other helpline name or number under any circumstances.
     - If no danger, set type to "safe", severity to "none", and keep other fields minimal.
     - Return ONLY the JSON object. No markdown.
     """
     
     try:
         response_text = ask_ai(prompt, response_json=True)
+        response_json = json.loads(response_text)
+        
+        # Standardize the emergency helplines programmatically to prevent any AI hallucination or false formatting
+        helplines_map = {
+            "rescue 1122": "Rescue 1122 - 1122",
+            "1122": "Rescue 1122 - 1122",
+            "police emergency": "Police Emergency - 15",
+            "police": "Police Emergency - 15",
+            "15": "Police Emergency - 15",
+            "edhi": "Edhi Ambulance - 115",
+            "115": "Edhi Ambulance - 115",
+            "fire brigade": "Fire Brigade - 16",
+            "16": "Fire Brigade - 16",
+            "women helpline": "Islamabad Police Women Helpline - 1815",
+            "1815": "Islamabad Police Women Helpline - 1815",
+            "igp complaint": "IGP Complaint Helpline - 1787",
+            "1787": "IGP Complaint Helpline - 1787",
+            "national disaster": "NDMA - 051-111-157-157",
+            "ndma": "NDMA - 051-111-157-157",
+            "051-111-157-157": "NDMA - 051-111-157-157",
+            "tourism helpline": "KP Tourism Helpline - 1422",
+            "1422": "KP Tourism Helpline - 1422"
+        }
+        cleaned_helplines = []
+        for resource in response_json.get("help_resources", []):
+            resource_lower = resource.lower()
+            matched = False
+            for key, val in helplines_map.items():
+                if key in resource_lower:
+                    if val not in cleaned_helplines:
+                        cleaned_helplines.append(val)
+                    matched = True
+                    break
+            if not matched and resource:
+                cleaned_helplines.append(resource)
+                
+        # Fallback to Rescue 1122 if none provided for a crisis
+        if response_json.get("type", "safe") != "safe" and not cleaned_helplines:
+            cleaned_helplines.append("Rescue 1122 - 1122")
+            
+        response_json["help_resources"] = cleaned_helplines
+        
         return {
             "prompt": prompt,
-            "response_json": json.loads(response_text)
+            "response_json": response_json
         }
     except Exception as e:
         print(f"Groq/Gemini AI failed: {e}")
