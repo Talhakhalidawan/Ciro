@@ -12,7 +12,7 @@ from api.services import (
     generate_ranked_queries
 )
 
-def is_weather_unusual(current_data, previous_request, city_name=None, sector=None):
+def is_weather_unusual(current_data, previous_request, city_name=None):
     """
     Checks if the current weather/environment is significantly different from the previous.
     Returns a string detailing the difference if unusual, else None.
@@ -27,8 +27,6 @@ def is_weather_unusual(current_data, previous_request, city_name=None, sector=No
         return None
 
     area_str = f"In {city_name}" if city_name else "In this area"
-    if city_name and sector:
-        area_str = f"In {city_name} ({sector})"
 
     current_temp = current_data.get('temperature_2m', 0)
     prev_temp = previous_request.temperature_2m or 0
@@ -77,7 +75,6 @@ def weather_view(request):
         lon = data.get('longitude')
         user_time = data.get('time')
         city_name = data.get('city_name')
-        sector = data.get('sector')
 
         if not user_id or lat is None or lon is None:
             return JsonResponse({'error': 'user_id, latitude, and longitude are required'}, status=400)
@@ -221,7 +218,6 @@ def weather_view(request):
             longitude=lon,
             user_time=parsed_time,
             city_name=city_name,
-            sector=sector,
             aqi=aqi,
             firms_fires_detected=firms_fires_detected,
             tomtom_incidents_count=tomtom_incidents_count,
@@ -246,7 +242,7 @@ def weather_view(request):
         # ── Anomaly check ─────────────────────────────────────────
         anomaly_diff = is_weather_unusual(
             current, previous_request,
-            city_name=city_name, sector=sector
+            city_name=city_name
         )
         ai_response = None
 
@@ -254,8 +250,7 @@ def weather_view(request):
             # 1. Generate ranked search queries (best → worst, location-aware)
             ranked_queries = generate_ranked_queries(
                 anomaly_diff,
-                city=city_name,
-                sector=sector
+                city=city_name
             )
             print(f"Ranked queries ({len(ranked_queries)}): {ranked_queries}")
 

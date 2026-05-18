@@ -127,12 +127,12 @@ def smart_search_platform(platform: str, ranked_queries: list, min_results: int 
 # Asks AI to produce a priority-ordered list of search queries (best → worst)
 # ─────────────────────────────────────────────────────────────────────────────
 
-def generate_ranked_queries(weather_diff: str, city: str = "", sector: str = "") -> list:
+def generate_ranked_queries(weather_diff: str, city: str = "") -> list:
     """
     Returns a ranked list of search query strings, from most specific/useful
     to least. Each query is self-contained (already includes location).
     """
-    location_str = f"{city} {sector}".strip() if city else "Pakistan"
+    location_str = city if city else "Pakistan"
 
     prompt = f"""
 You are a safety assistant in Pakistan. Here is an anomaly that was detected near {location_str}:
@@ -149,7 +149,7 @@ Rules:
 - Sort them: most specific and timely first, most general last.
 
 Return ONLY a JSON array of strings. No other text. Example:
-["Islamabad G-10 heatwave today", "G-10 garmi alert", "Islamabad temperature spike", ...]
+["Islamabad heatwave today", "Islamabad garmi alert", "Islamabad temperature spike", ...]
 """
 
     try:
@@ -285,7 +285,7 @@ Rules:
     Rescue 1122 - 1122 | Police Emergency - 15 | Edhi Ambulance - 115 | Fire Brigade - 16
     Police Women Helpline - 1815 | IGP Complaint Helpline - 1787 | NDMA - 051-111-157-157 | KP Tourism Helpline - 1422
   Only include those relevant to the crisis. NEVER invent numbers.
-- Use exact city/sector for localised advice.
+- Use exact city for localised advice.
 - If no crisis, type="safe", severity="none", top_posts=[].
 - Return ONLY the JSON object. No markdown, no explanation.
 """

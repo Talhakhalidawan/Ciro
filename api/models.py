@@ -8,7 +8,6 @@ class WeatherRequest(models.Model):
     
     # Localized area details
     city_name = models.CharField(max_length=255, null=True, blank=True)
-    sector = models.CharField(max_length=255, null=True, blank=True)
     aqi = models.IntegerField(null=True, blank=True)
     firms_fires_detected = models.IntegerField(default=0, null=True, blank=True)
     tomtom_incidents_count = models.IntegerField(default=0, null=True, blank=True)

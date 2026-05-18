@@ -49,9 +49,9 @@ def test_weather_anomaly_trigger():
     print(f"TEST 1 — WEATHER HEATWAVE ANOMALY")
     print(f"{'='*60}")
 
-    print("\n  Step 1: Baseline (34°C, Islamabad G-10)")
+    print("\n  Step 1: Baseline (34°C, Islamabad)")
     r1 = _post({
-        'user_id': user_id, 'city_name': 'Islamabad', 'sector': 'G-10',
+        'user_id': user_id, 'city_name': 'Islamabad',
         'latitude': 33.684, 'longitude': 73.048, 'time': '2023-10-27T13:00:00Z',
         'mock_current_weather': {'temperature_2m': 34.0, 'precipitation': 0.0, 'aqi': 80}
     })
@@ -64,7 +64,7 @@ def test_weather_anomaly_trigger():
 
     print("\n  Step 2: Anomaly (46°C — rise of +12°C triggers alert)")
     r2 = _post({
-        'user_id': user_id, 'city_name': 'Islamabad', 'sector': 'G-10',
+        'user_id': user_id, 'city_name': 'Islamabad',
         'latitude': 33.684, 'longitude': 73.048, 'time': '2023-10-27T14:00:00Z',
         'mock_current_weather': {'temperature_2m': 46.0, 'precipitation': 0.0, 'aqi': 80}
     })
@@ -84,7 +84,7 @@ def test_firms_anomaly_trigger():
 
     print("\n  Step 1: Baseline (no fires)")
     r1 = _post({
-        'user_id': user_id, 'city_name': 'Islamabad', 'sector': 'Margalla Hills',
+        'user_id': user_id, 'city_name': 'Islamabad Margalla Hills',
         'latitude': 33.74, 'longitude': 73.05, 'time': '2023-10-27T13:00:00Z',
         'mock_current_weather': {'temperature_2m': 30.0, 'firms_fires_detected': 0}
     })
@@ -92,7 +92,7 @@ def test_firms_anomaly_trigger():
 
     print("\n  Step 2: 5 active fire hotspots detected")
     r2 = _post({
-        'user_id': user_id, 'city_name': 'Islamabad', 'sector': 'Margalla Hills',
+        'user_id': user_id, 'city_name': 'Islamabad Margalla Hills',
         'latitude': 33.74, 'longitude': 73.05, 'time': '2023-10-27T14:00:00Z',
         'mock_current_weather': {'temperature_2m': 30.0, 'firms_fires_detected': 5}
     })
@@ -112,7 +112,7 @@ def test_tomtom_anomaly_trigger():
 
     print("\n  Step 1: Baseline (no road incidents)")
     r1 = _post({
-        'user_id': user_id, 'city_name': 'Islamabad', 'sector': 'G-10',
+        'user_id': user_id, 'city_name': 'Islamabad',
         'latitude': 33.684, 'longitude': 73.048, 'time': '2023-10-27T13:00:00Z',
         'mock_current_weather': {
             'temperature_2m': 30.0,
@@ -123,7 +123,7 @@ def test_tomtom_anomaly_trigger():
 
     print("\n  Step 2: Road closed + accident")
     r2 = _post({
-        'user_id': user_id, 'city_name': 'Islamabad', 'sector': 'G-10',
+        'user_id': user_id, 'city_name': 'Islamabad',
         'latitude': 33.684, 'longitude': 73.048, 'time': '2023-10-27T14:00:00Z',
         'mock_current_weather': {
             'temperature_2m': 30.0,
@@ -151,7 +151,7 @@ def test_safe_response():
     print(f"{'='*60}")
     unique_city = f"SafeCity-{uuid.uuid4()}"
     r = _post({
-        'user_id': user_id, 'city_name': unique_city, 'sector': 'G-10',
+        'user_id': user_id, 'city_name': unique_city,
         'latitude': 33.684, 'longitude': 73.048, 'time': '2023-10-27T13:00:00Z'
     })
     print(f"  HTTP {r.status_code}")
