@@ -29,7 +29,7 @@ def test_weather_endpoint_success():
             print("Status from server:", data.get('status'))
             if 'ai_analysis' in data:
                 print("--- AI ANOMALY ANALYSIS TRIGGERED ---")
-                print(json.dumps(data['ai_analysis'], indent=2))
+                print(json.dumps(data['ai_analysis'], indent=2, ensure_ascii=False))
             else:
                 print("No anomaly detected (safe).")
             print("Success! Data for", loc['user_id'], "has been saved.")
@@ -86,7 +86,7 @@ def test_weather_anomaly_trigger():
         print("Server Response Status:", data.get('status'))
         if 'ai_analysis' in data:
             print("\n🚨 SUCCESS! AI ANOMALY ANALYSIS TRIGGERED!")
-            print(json.dumps(data['ai_analysis'], indent=2))
+            print(json.dumps(data['ai_analysis'], indent=2, ensure_ascii=False))
         else:
             print("❌ FAILURE: No AI analysis returned. Anomaly didn't trigger or AI failed.")
     else:

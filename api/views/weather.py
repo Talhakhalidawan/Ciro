@@ -154,6 +154,15 @@ def weather_view(request):
         final_response = {
             'status': 'success',
             'user_time_received': user_time,
+            'weather_details': {
+                'temperature_2m': current.get('temperature_2m'),
+                'relative_humidity_2m': current.get('relative_humidity_2m'),
+                'apparent_temperature': current.get('apparent_temperature'),
+                'precipitation': current.get('precipitation'),
+                'wind_speed_10m': current.get('wind_speed_10m'),
+                'wind_gusts_10m': current.get('wind_gusts_10m'),
+                'weather_code': current.get('weather_code'),
+            },
             'weather': weather_data
         }
         
@@ -161,7 +170,7 @@ def weather_view(request):
         if ai_response and ai_response.get('type') != 'safe':
             final_response['ai_analysis'] = ai_response
             
-        return JsonResponse(final_response)
+        return JsonResponse(final_response, json_dumps_params={'ensure_ascii': False})
             
     except json.JSONDecodeError:
         return JsonResponse({'error': 'Invalid JSON'}, status=400)
