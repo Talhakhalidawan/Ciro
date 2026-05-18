@@ -150,21 +150,10 @@ def generate_ranked_queries(weather_diff: str, city: str = "") -> list:
     location_str = city if city else "Pakistan"
 
     prompt = f"""
-You are a safety assistant in Pakistan. Here is an anomaly that was detected near {location_str}:
-{weather_diff}
-
-I need to verify if this is really happening by searching the internet. Give me a ranked list of
-search queries I can type into DuckDuckGo — sorted from MOST SPECIFIC and useful to LEAST useful.
-
-Rules:
-- Each query must be self-contained and include the location ({location_str}) where relevant.
-- Mix English and Roman Urdu (Pakistani style, not Hindi). Roman Urdu words: garmi, toofan, baarish, sylab, aandhi, mosam, hadsa, sarak band, aag.
-- Queries should be short (3-6 words), focused, and NOT so broad that they return old or unrelated results.
-- Generate between 5 and 8 queries total.
-- Sort them: most specific and timely first, most general last.
-
-Return ONLY a JSON array of strings. No other text. Example:
-["Islamabad heatwave today", "Islamabad garmi alert", "Islamabad temperature spike", ...]
+Anomaly near {location_str}: {weather_diff}
+Generate a JSON array of 5-8 short search queries (English/Roman Urdu, e.g. garmi, toofan, baarish, sylab, sarak band, aag) to verify this on DuckDuckGo.
+Include '{location_str}' in queries. Sort most specific first.
+Return ONLY a JSON array of strings. Example: ["{location_str} heatwave", "{location_str} garmi"]
 """
 
     try:
@@ -228,7 +217,7 @@ def _standardise_helplines(raw: list, crisis_type: str) -> list:
 
 def analyze_with_ai(
     weather_diff: str,
-    search_results: dict,       # {platform: [{"query_used": str, "results": [...]}]}
+    search_results: dict,       # {platform: {"query_used": str, "results": [...]}}
     traffic_incidents: list = None
 ) -> dict:
     """
@@ -238,71 +227,89 @@ def analyze_with_ai(
         "response_json": {
             "type", "severity", "confidence", "title", "details",
             "safety_advises", "help_resources", "notification_details",
-            "top_posts": [{"query": str, "platform": str, "items": [...]}]  ← new
+            "top_posts": [{"query": str, "platform": str, "items": [...]}]
         }
     }
     """
     traffic_section = ""
     if traffic_incidents:
         traffic_section = (
-            "\nActive road incidents detected by TomTom nearby:\n"
-            + json.dumps(traffic_incidents, indent=2, ensure_ascii=False)
+            "\nRoad incidents:\n"
+            + json.dumps(traffic_incidents, ensure_ascii=False)
             + "\n"
         )
 
-    # Flatten search results for prompt (keep compact)
-    search_summary = {}
+    # 1. Programmatically filter & score all retrieved search items in Python
+    all_items = []
     for platform, data in search_results.items():
         query_used = data.get("query_used", "")
-        items = data.get("results", [])[:4]   # limit to 4 per platform in prompt
-        search_summary[platform] = {"query_used": query_used, "items": items}
+        for item in data.get("results", []):
+            all_items.append({
+                "platform": platform,
+                "query_used": query_used,
+                "title": item.get("title", ""),
+                "snippet": item.get("snippet", ""),
+                "url": item.get("url", "")
+            })
+
+    # Crisis keywords for relevance scoring
+    crisis_keywords = [
+        "temp", "garmi", "heatwave", "hot", "rain", "monsoon", "flood", "sylab", "baarish", 
+        "wind", "storm", "aandhi", "toofan", "smog", "fog", "mosam", "degree", "aqi", 
+        "pollution", "smoke", "fire", "aag", "wildfire", "accident", "closed", "delay", 
+        "block", "sarak", "band", "traffic", "jam", "route"
+    ]
+
+    def score_item(it):
+        text = f"{it['title']} {it['snippet']}".lower()
+        score = 0
+        for kw in crisis_keywords:
+            if kw in text:
+                score += 1
+        return score
+
+    # Score and sort items
+    scored_items = []
+    for idx, item in enumerate(all_items):
+        score = score_item(item)
+        scored_items.append((score, idx, item))
+
+    # Sort descending by score
+    scored_items.sort(key=lambda x: x[0], reverse=True)
+
+    # Pick the top 7 items overall to keep prompt size tiny
+    top_scored_items = scored_items[:7]
+
+    # Map candidate posts to simple candidates containing ONLY id, platform, title (NO url, NO snippet!)
+    ai_candidates = []
+    for score, idx, item in top_scored_items:
+        ai_candidates.append({
+            "id": idx,
+            "platform": item["platform"],
+            "title": item["title"]
+        })
 
     prompt = f"""
-You are a safety assistant for people in Pakistan. An environmental anomaly has been reported.
-
-Anomaly detected:
-{weather_diff}
+Anomaly: {weather_diff}
 {traffic_section}
-Social media reports we found (per platform, with the query that retrieved them):
-{json.dumps(search_summary, indent=2, ensure_ascii=False)}
+Post Candidates:
+{json.dumps(ai_candidates, ensure_ascii=False)}
 
 Task:
-1. Decide if there is a real crisis (heatwave, flood, dust storm, smog, road incident, fire, etc.).
-2. Pick up to 3 platforms whose search results are most relevant and on-point for this crisis.
-3. Return a single JSON object with exactly these fields:
-
+Determine if there is a crisis (type: heatwave, heavy_rainfall, monsoon, flood, cold_wave, fog_smog, dust_storm, severe_wind, road_incident, wildfire, safe).
+Choose up to 3 most relevant post IDs from "Post Candidates" that confirm the event.
+Return ONLY this JSON (no extra text/markup):
 {{
   "type": "heatwave|heavy_rainfall|monsoon|flood|cold_wave|fog_smog|dust_storm|severe_wind|road_incident|wildfire|safe",
   "severity": "high|medium|low|none",
   "confidence": "high|medium|low",
-  "title": "very short crisis title (max 7 words)",
-  "details": "one sentence (max 35 words) summarising what is happening and why it matters",
-  "safety_advises": ["max 10-word location-specific tip", "tip 2", "tip 3"],
-  "help_resources": ["Service Name - Number"],
-  "notification_details": {{
-    "type": "weather_alert|road_alert|fire_alert|info|safe",
-    "title": "push notification title (max 35 chars)",
-    "body":  "push notification body (max 80 chars)"
-  }},
-  "top_posts": [
-    {{
-      "platform": "youtube|x|facebook|tiktok",
-      "query": "the search query that found these",
-      "items": [{{"title": "...", "snippet": "...", "url": "..."}}]
-    }}
-  ]
+  "title": "Short title",
+  "details": "One short sentence.",
+  "safety_advises": ["Tip 1", "Tip 2"],
+  "help_resources": ["Rescue 1122 - 1122"],
+  "notification_details": {{"type": "weather_alert|road_alert|fire_alert|info|safe", "title": "Title", "body": "Body"}},
+  "top_post_ids": [id1, id2]
 }}
-
-Rules:
-- "top_posts" must contain only platforms whose results clearly relate to the detected crisis. Max 3 entries.
-- If results are irrelevant or empty, omit that platform from "top_posts".
-- "help_resources" must only use numbers from this list:
-    Rescue 1122 - 1122 | Police Emergency - 15 | Edhi Ambulance - 115 | Fire Brigade - 16
-    Police Women Helpline - 1815 | IGP Complaint Helpline - 1787 | NDMA - 051-111-157-157 | KP Tourism Helpline - 1422
-  Only include those relevant to the crisis. NEVER invent numbers.
-- Use exact city for localised advice.
-- If no crisis, type="safe", severity="none", top_posts=[].
-- Return ONLY the JSON object. No markdown, no explanation.
 """
 
     try:
@@ -315,9 +322,35 @@ Rules:
             response_json.get("type", "safe")
         )
 
-        # Ensure top_posts is a list
-        if not isinstance(response_json.get("top_posts"), list):
-            response_json["top_posts"] = []
+        # Map top_post_ids selected by AI back to their full details (title, snippet, url) in Python
+        selected_ids = response_json.get("top_post_ids", [])
+        if not isinstance(selected_ids, list):
+            selected_ids = []
+
+        platform_map = {}
+        for p_idx in selected_ids:
+            # Find in top_scored_items
+            found = next((item for score, idx, item in top_scored_items if idx == p_idx), None)
+            if found:
+                platform = found["platform"]
+                query = found["query_used"]
+                item_detail = {
+                    "title": found["title"],
+                    "snippet": found["snippet"],
+                    "url": found["url"]
+                }
+                if platform not in platform_map:
+                    platform_map[platform] = {
+                        "platform": platform,
+                        "query": query,
+                        "items": []
+                    }
+                platform_map[platform]["items"].append(item_detail)
+
+        response_json["top_posts"] = list(platform_map.values())
+        # Clean up the top_post_ids field so it is not returned in the final response
+        if "top_post_ids" in response_json:
+            del response_json["top_post_ids"]
 
         return {"prompt": prompt, "response_json": response_json}
 
