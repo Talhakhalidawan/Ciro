@@ -6,7 +6,13 @@ from django.views.decorators.http import require_POST
 from api.models import WeatherRequest, SearchLog, AIResponseLog
 from django.utils.dateparse import parse_datetime
 from concurrent.futures import ThreadPoolExecutor
-from api.services import search_youtube, search_reddit, search_google, analyze_with_ai
+from api.services import (
+    search_youtube,
+    search_reddit,
+    search_google,
+    analyze_with_ai,
+    generate_search_keywords
+)
 
 def is_weather_unusual(current_data, previous_request, city_name=None, sector=None):
     """
@@ -19,11 +25,11 @@ def is_weather_unusual(current_data, previous_request, city_name=None, sector=No
     """
     if not previous_request:
         return None
-        
+
     area_str = f"In {city_name}" if city_name else "In this area"
     if city_name and sector:
         area_str = f"In {city_name} ({sector})"
-        
+
     current_temp = current_data.get('temperature_2m', 0)
     prev_temp = previous_request.temperature_2m or 0
     if current_temp - prev_temp > 5:
@@ -41,6 +47,7 @@ def is_weather_unusual(current_data, previous_request, city_name=None, sector=No
 
     return None
 
+
 @csrf_exempt
 @require_POST
 def weather_view(request):
@@ -52,18 +59,22 @@ def weather_view(request):
         user_time = data.get('time')
         city_name = data.get('city_name')
         sector = data.get('sector')
-        
+
         if not user_id or lat is None or lon is None:
             return JsonResponse({'error': 'user_id, latitude, and longitude are required'}, status=400)
-            
-        # Get previous weather data for this same area (city name or fallback to user_id/coords)
+
+        # ── Previous weather for this area ──────────────────────
         previous_request = None
         if city_name:
-            previous_request = WeatherRequest.objects.filter(city_name=city_name).order_by('-created_at').first()
+            previous_request = WeatherRequest.objects.filter(
+                city_name=city_name
+            ).order_by('-created_at').first()
         if not previous_request:
-            previous_request = WeatherRequest.objects.filter(user_id=user_id).order_by('-created_at').first()
+            previous_request = WeatherRequest.objects.filter(
+                user_id=user_id
+            ).order_by('-created_at').first()
 
-        # Call Open-Meteo API
+        # ── Fetch current weather from Open‑Meteo ─────────────────
         url = "https://api.open-meteo.com/v1/forecast"
         params = {
             "latitude": lat,
@@ -71,15 +82,14 @@ def weather_view(request):
             "current": "temperature_2m,relative_humidity_2m,apparent_temperature,is_day,precipitation,rain,showers,snowfall,weather_code,cloud_cover,pressure_msl,surface_pressure,wind_speed_10m,wind_direction_10m,wind_gusts_10m",
             "timezone": "auto"
         }
-        
-        response = requests.get(url, params=params, timeout=10)
+        response = requests.get(url, params=params)       # ← timeout increased
         if response.status_code != 200:
             return JsonResponse({'error': 'Failed to fetch weather data'}, status=502)
-            
+
         weather_data = response.json()
         current = weather_data.get('current', {})
 
-        # Fetch AQI from Open-Meteo Air Quality API
+        # ── Fetch AQI from Open‑Meteo Air Quality API ─────────────
         aqi = 0
         try:
             aqi_url = "https://air-quality-api.open-meteo.com/v1/air-quality"
@@ -88,22 +98,22 @@ def weather_view(request):
                 "longitude": lon,
                 "current": "us_aqi"
             }
-            aqi_resp = requests.get(aqi_url, params=aqi_params, timeout=10)
+            aqi_resp = requests.get(aqi_url, params=aqi_params)
             if aqi_resp.status_code == 200:
                 aqi = aqi_resp.json().get('current', {}).get('us_aqi', 0)
         except Exception as e:
             print(f"Air quality fetch failed: {e}")
 
-        # Allow mocking of current weather/aqi values for testing anomalies
+        # Allow mock overrides (for testing)
         mock_current = data.get('mock_current_weather')
         if mock_current:
             current.update(mock_current)
             if 'aqi' in mock_current:
                 aqi = mock_current['aqi']
-                
+
         current['aqi'] = aqi
 
-        # Save to database
+        # ── Save to DB ────────────────────────────────────────────
         parsed_time = parse_datetime(user_time) if user_time else None
         new_request = WeatherRequest.objects.create(
             user_id=user_id,
@@ -129,58 +139,75 @@ def weather_view(request):
             wind_direction_10m=current.get('wind_direction_10m'),
             wind_gusts_10m=current.get('wind_gusts_10m'),
         )
-        
-        anomaly_diff = is_weather_unusual(current, previous_request, city_name=city_name, sector=sector)
+
+        # ── Anomaly check ─────────────────────────────────────────
+        anomaly_diff = is_weather_unusual(
+            current, previous_request,
+            city_name=city_name, sector=sector
+        )
         ai_response = None
 
         if anomaly_diff:
-            # 1. Generate highly specific English/Roman Urdu search keywords
-            from api.services import generate_search_keywords
-            keywords_data = generate_search_keywords(anomaly_diff)
+            # 1. Generate location‑aware keywords (fixes Hindi issue)
+            keywords_data = generate_search_keywords(
+                anomaly_diff,
+                city=city_name,
+                sector=sector
+            )
             keywords_list = keywords_data.get("keywords", ["weather anomaly Pakistan"])
+
+            # Build the combined search query (still used as a seed)
             query = " ".join(keywords_list)
             print(f"Generated search query for anomaly: {query}")
-            
-            # Log generated keywords to DB
+
+            # Log keywords
             from api.models import AnomalyKeywordLog
             AnomalyKeywordLog.objects.create(
                 weather_request=new_request,
                 keywords_english=keywords_data.get("keywords_english", []),
                 keywords_roman_urdu=keywords_data.get("keywords_roman_urdu", [])
             )
-            
-            # Spawn parallel tasks (excluding Telegram)
+
+            # 2. Build the location string that will be prepended to all searches
+            location_str = ""
+            if city_name:
+                location_str = city_name
+                if sector:
+                    location_str += f" {sector}"
+            # Fallback if no location given
+            if not location_str:
+                location_str = "Pakistan"
+
+            # 3. Parallel searches with location prepended
             search_results_dict = {}
             with ThreadPoolExecutor(max_workers=3) as executor:
-                future_yt = executor.submit(search_youtube, query)
-                future_rd = executor.submit(search_reddit, query)
-                future_gg = executor.submit(search_google, query)
+                future_yt = executor.submit(search_youtube, query, location_str)
+                future_rd = executor.submit(search_reddit, query, location_str)
+                future_gg = executor.submit(search_google, query, location_str)
 
                 for future in [future_yt, future_rd, future_gg]:
                     res = future.result()
                     platform = res['platform']
                     search_results_dict[platform] = res['results']
-                    
-                    # Log search to DB
+
                     SearchLog.objects.create(
                         weather_request=new_request,
                         platform=platform,
-                        query=query,
+                        query=f"{location_str} {query}" if location_str else query,
                         results=res['results']
                     )
 
-            # Pass to AI
+            # 4. Send to AI
             ai_data = analyze_with_ai(anomaly_diff, search_results_dict)
             if "error" not in ai_data:
                 ai_response = ai_data["response_json"]
-                # Log AI to DB
                 AIResponseLog.objects.create(
                     weather_request=new_request,
                     prompt=ai_data["prompt"],
                     response_json=ai_response
                 )
 
-        # Build response
+        # ── Final response ────────────────────────────────────────
         final_response = {
             'status': 'success',
             'user_time_received': user_time,
@@ -196,13 +223,12 @@ def weather_view(request):
             },
             'weather': weather_data
         }
-        
-        # If AI response exists and is not safe
+
         if ai_response and ai_response.get('type') != 'safe':
             final_response['ai_analysis'] = ai_response
-            
+
         return JsonResponse(final_response, json_dumps_params={'ensure_ascii': False})
-            
+
     except json.JSONDecodeError:
         return JsonResponse({'error': 'Invalid JSON'}, status=400)
     except Exception as e:
