@@ -86,6 +86,7 @@ def weather_view(request):
 
         # ── Dynamic Testing Mock Overrides ──────────────────────────
         use_mock = data.get('use_mock', False)
+        force_crisis = data.get('force_crisis', False)
         if use_mock:
             import random
             temperature_2m = round(random.uniform(35.0, 49.0), 1)
@@ -130,13 +131,13 @@ def weather_view(request):
                 }
             }
 
-            if SHOW_CRISIS_TEST:
+            if SHOW_CRISIS_TEST or force_crisis:
                 final_response['alert'] = {
                     'type':          'heatwave',
                     'severity':      'extreme',
                     'confidence':    0.95,
-                    'title':         'Extreme Heatwave Warning',
-                    'details':       f'Critical meteorological alert: Simulated high temperature of {temperature_2m}°C detected in Sector G-10, Islamabad. Citizens are advised to seek indoor shelter and remain hydrated.',
+                    'title':         'Extreme Heatwave Alert',
+                    'details':       f'Critical meteorological alert: Simulated high temperature of {temperature_2m}°C detected in Gujrat. Citizens are advised to seek indoor shelter and remain hydrated.',
                     'safety_advises':  [
                         'Stay indoors during peak sunlight hours (11:00 AM - 4:00 PM).',
                         'Consume sufficient fluids and wear loose, light-colored clothing.',
@@ -155,13 +156,13 @@ def weather_view(request):
                     'top_posts': [
                         {
                             'platform': 'x',
-                            'url': 'https://x.com/search?q=islamabad+heatwave',
-                            'title': 'Heatwave peak temperature hits extreme record in capital!'
+                            'url': 'https://x.com/search?q=gujrat+heatwave',
+                            'title': 'Heatwave peak temperature hits extreme record in Gujrat!'
                         },
                         {
                             'platform': 'youtube',
                             'url': 'https://youtube.com',
-                            'title': 'Live Report: Severe summer temperature spikes across Pakistan'
+                            'title': 'Live Report: Severe summer temperature spikes across Punjab'
                         }
                     ]
                 }
@@ -335,7 +336,7 @@ def weather_view(request):
         )
         ai_response = None
 
-        if anomaly_diff:
+        if anomaly_diff and not force_crisis:
             # 1. Generate ranked search queries (best → worst, location-aware)
             ranked_queries = generate_ranked_queries(
                 anomaly_diff,
@@ -416,8 +417,43 @@ def weather_view(request):
             }
         }
 
-        # Alert block — only added when there is an actual crisis
-        if ai_response and ai_response.get('type') != 'safe':
+        # Alert block — only added when there is an actual crisis OR force_crisis is enabled
+        if force_crisis:
+            final_response['alert'] = {
+                'type':          'heatwave',
+                'severity':      'extreme',
+                'confidence':    0.95,
+                'title':         'Extreme Heatwave Alert',
+                'details':       f'Critical meteorological alert: Simulated high temperature of {current.get("temperature_2m", 49.0)}°C detected in Gujrat. Citizens are advised to seek indoor shelter and remain hydrated.',
+                'safety_advises':  [
+                    'Stay indoors during peak sunlight hours (11:00 AM - 4:00 PM).',
+                    'Consume sufficient fluids and wear loose, light-colored clothing.',
+                    'Avoid strenuous physical activities outdoors.'
+                ],
+                'help_resources':  [
+                    {'name': 'Rescue 1122', 'contact': '1122'},
+                    {'name': 'Police Emergency', 'contact': '15'},
+                    {'name': 'Edhi Ambulance', 'contact': '115'}
+                ],
+                'notification': {
+                    'type':  'extreme_weather',
+                    'title': 'Extreme Heatwave Alert',
+                    'body':  f'Dangerous temperature spike to {current.get("temperature_2m", 49.0)}°C detected! Avoid outdoor exposure.'
+                },
+                'top_posts': [
+                    {
+                        'platform': 'x',
+                        'url': 'https://x.com/search?q=gujrat+heatwave',
+                        'title': 'Heatwave peak temperature hits extreme record in Gujrat!'
+                    },
+                    {
+                        'platform': 'youtube',
+                        'url': 'https://youtube.com',
+                        'title': 'Live Report: Severe summer temperature spikes across Punjab'
+                    }
+                ]
+            }
+        elif ai_response and ai_response.get('type') != 'safe':
             notif = ai_response.get('notification_details', {})
             final_response['alert'] = {
                 'type':          ai_response.get('type'),
