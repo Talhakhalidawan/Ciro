@@ -1,39 +1,21 @@
-name: Deploy to PythonAnywhere
+name: Deploy Ciro to GCP
 
 on:
   push:
     branches:
-      - main
+      - main 
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
+
     steps:
-      - name: Checkout Code
-        uses: actions/checkout@v4
-
-      - name: Force Clean Deploy via API Console
-        run: |
-          # 1. Ask PythonAnywhere for an active console ID or create a new one
-          CONSOLE_ID=$(curl -s -f -X GET "https://www.pythonanywhere.com/api/v0/user/${{ secrets.PA_USERNAME }}/consoles/" \
-            -H "Authorization: Token ${{ secrets.PA_API_TOKEN }}" | jq -r '.[0].id // empty')
-          
-          if [ -z "$CONSOLE_ID" ]; then
-            CONSOLE_ID=$(curl -s -f -X POST "https://www.pythonanywhere.com/api/v0/user/${{ secrets.PA_USERNAME }}/consoles/" \
-              -H "Authorization: Token ${{ secrets.PA_API_TOKEN }}" \
-              -d 'executable=bash' | jq -r '.id')
-          fi
-
-          # 2. Inject commands (USING JSON SO IT ACTUALLY HITS ENTER)
-          curl -s -f -X POST "https://www.pythonanywhere.com/api/v0/user/${{ secrets.PA_USERNAME }}/consoles/$CONSOLE_ID/send_input/" \
-            -H "Authorization: Token ${{ secrets.PA_API_TOKEN }}" \
-            -H "Content-Type: application/json" \
-            -d '{"input": "cd ~/ciro_backend && git fetch --all && git reset --hard origin/main && python3 -m pip install --user -r requirements.txt && python3 manage.py migrate && exit\n"}'
-
-          # 3. Wait for the terminal to actually finish the execution
-          echo "Commands sent. Waiting 25 seconds for PythonAnywhere to process..."
-          sleep 25
-
-          # 4. Trigger the Web App Reload
-          curl -s -f -X POST "https://www.pythonanywhere.com/api/v0/user/${{ secrets.PA_USERNAME }}/webapps/ciro.pythonanywhere.com/reload/" \
-            -H "Authorization: Token ${{ secrets.PA_API_TOKEN }}"
+      - name: Execute remote SSH commands
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.GCP_HOST }}
+          username: ${{ secrets.GCP_USERNAME }}
+          key: ${{ secrets.GCP_SSH_KEY }}
+          script: |
+            cd ~/ciro
+            ./deploy.sh
