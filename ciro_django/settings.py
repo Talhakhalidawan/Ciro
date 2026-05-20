@@ -161,4 +161,4 @@ DEBUG_FORCE_CRISIS_ANOMALY = False
 WEATHER_CHECK_INTERVAL_MINUTES = 30
 
 # Maximum hours ago a YouTube video can be uploaded to be considered for a crisis alert
-YOUTUBE_SCRAPE_MAX_HOURS_AGO = 5
+YOUTUBE_SCRAPE_MAX_HOURS_AGO = 10

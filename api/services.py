@@ -102,8 +102,11 @@ def _clean(text: str) -> str:
     return (text or "").replace("#", "").strip()
 
 
-def is_recent(published_text: str, max_hours: int = 3) -> bool:
+def is_recent(published_text: str, max_hours: int = None) -> bool:
     """Check if the video is published within the last X hours based on YouTube's simple text."""
+    if max_hours is None:
+        max_hours = getattr(settings, 'YOUTUBE_SCRAPE_MAX_HOURS_AGO', 3)
+        
     if not published_text:
         return False
     text = published_text.lower()
@@ -238,7 +241,7 @@ def get_deep_youtube_details(query: str, max_results: int = 4):
             if len(filtered_videos) >= max_results:
                 break
 
-        log_step("YOUTUBE SCRAPER", f"Scraped {count} videos. Checked {parsed_count} within 3h. Matches: {len(filtered_videos)}", filtered_videos)
+        log_step("YOUTUBE SCRAPER", f"Scraped {count} videos. Checked {parsed_count} within {max_hours}h. Matches: {len(filtered_videos)}", filtered_videos)
 
     except Exception as e:
         log_step("YOUTUBE SCRAPER ERROR", f"Scrapetube failed: {e}")
