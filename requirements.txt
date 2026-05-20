@@ -9,3 +9,5 @@ requests==2.32.5
 scrapetube==2.5.1
 youtube-transcript-api==0.6.3
 python-dotenv==1.0.1
+channels==4.3.2
+daphne==4.1.2

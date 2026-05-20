@@ -73,3 +73,36 @@ class AdminCrisisScenario(models.Model):
     def __str__(self):
         status = "ACTIVE" if self.is_active else "INACTIVE"
         return f"[{status}] {self.get_crisis_type_display()} in {self.location}"
+
+
+class CommunityIncident(models.Model):
+    INCIDENT_TYPES = [
+        ('accident', 'Accident'),
+        ('fire', 'Fire'),
+        ('flood', 'Flooding'),
+        ('road_closure', 'Road Closure'),
+        ('power_outage', 'Power Outage'),
+        ('gas_leak', 'Gas Leak'),
+        ('protest', 'Protest'),
+        ('crime', 'Crime'),
+        ('medical', 'Medical Emergency'),
+        ('other', 'Other'),
+    ]
+
+    user_id = models.CharField(max_length=255)
+    title = models.CharField(max_length=255)
+    description = models.TextField()
+    incident_type = models.CharField(max_length=50, choices=INCIDENT_TYPES, default='other')
+    latitude = models.FloatField()
+    longitude = models.FloatField()
+    radius_km = models.FloatField(default=1.0, help_text="Affected area radius in km")
+    # Optional custom polygon boundary (stored as JSON array of {lat, lng} points)
+    custom_boundary = models.JSONField(null=True, blank=True, help_text="Custom polygon points if user drew a shape")
+    created_at = models.DateTimeField(auto_now_add=True)
+    is_active = models.BooleanField(default=True)
+
+    class Meta:
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f"[{self.incident_type}] {self.title} by {self.user_id}"
