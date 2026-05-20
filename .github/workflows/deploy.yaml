@@ -19,3 +19,4 @@ jobs:
           username: ${{ secrets.PA_USERNAME }}
           api_token: ${{ secrets.PA_API_TOKEN }}
           domain_name: 'ciro.pythonanywhere.com'
+          virtualenv_name: '.virtualenvs/ciro-env'
