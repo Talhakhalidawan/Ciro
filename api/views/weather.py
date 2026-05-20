@@ -77,6 +77,9 @@ def weather_view(request):
         user_time = data.get('time')
         city_name = data.get('city_name')
 
+        location_name = city_name or "Gujrat"
+        region_and_country = "Gujrat, Pakistan"
+
         if not user_id or lat is None or lon is None:
             return JsonResponse({'error': 'user_id, latitude, and longitude are required'}, status=400)
 
@@ -146,6 +149,22 @@ def weather_view(request):
         tomtom_incidents_summary = []
         tomtom_key = getattr(settings, 'MYTOMTOM_API_KEY', None)
         if tomtom_key:
+            # ── Reverse Geocode Coordinates using TomTom Search API ──
+            try:
+                geocode_url = f"https://api.tomtom.com/search/2/reverseGeocode/{lat},{lon}.json"
+                geocode_resp = requests.get(geocode_url, params={"key": tomtom_key}, timeout=5)
+                if geocode_resp.status_code == 200:
+                    geo_data = geocode_resp.json()
+                    addresses = geo_data.get("addresses", [])
+                    if addresses:
+                        address = addresses[0].get("address", {})
+                        city = address.get("municipality") or address.get("localName") or address.get("countrySubdivision") or city_name or "Gujrat"
+                        country = address.get("country") or "Pakistan"
+                        location_name = city
+                        region_and_country = f"{city}, {country}"
+            except Exception as e:
+                print(f"TomTom Reverse Geocoding failed: {e}")
+
             try:
                 # Bounding box ~11km x 11km around coordinate (same as FIRMS)
                 tt_lon_min, tt_lat_min = lon - 0.1, lat - 0.1
@@ -246,19 +265,12 @@ def weather_view(request):
         from django.conf import settings
         debug_force_crisis = getattr(settings, 'DEBUG_FORCE_CRISIS_ANOMALY', False)
 
-        if debug_force_crisis:
-            # Overwrite current weather memory to guarantee it triggers an anomaly
-            current['temperature_2m'] = 48.5
-            current['apparent_temperature'] = 52.0
-            current['precipitation'] = 0.0
-            current['firms_fires_detected'] = 4
-
         anomaly_diff = is_weather_unusual(
             current, previous_request,
             city_name=city_name
         )
 
-        if debug_force_crisis and not anomaly_diff:
+        if debug_force_crisis:
             anomaly_diff = f"In {city_name or 'Gujrat'}, temperature rose dramatically to 48.5°C and 4 thermal anomalies/fires were detected."
 
         ai_response = None
@@ -325,6 +337,8 @@ def weather_view(request):
         # ── Build lean, mobile-ready response ─────────────────────
         final_response = {
             'status': 'success',
+            'location_name': location_name,
+            'region_and_country': region_and_country,
             # Core environmental snapshot
             'environment': {
                 'temperature_c':       current.get('temperature_2m'),
