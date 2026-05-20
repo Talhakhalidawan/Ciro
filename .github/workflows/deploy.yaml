@@ -18,18 +18,21 @@ jobs:
           CONSOLE_ID=$(curl -s -f -X GET "https://www.pythonanywhere.com/api/v0/user/${{ secrets.PA_USERNAME }}/consoles/" \
             -H "Authorization: Token ${{ secrets.PA_API_TOKEN }}" | jq -r '.[0].id // empty')
           
-          # If no console exists, create one
           if [ -z "$CONSOLE_ID" ]; then
             CONSOLE_ID=$(curl -s -f -X POST "https://www.pythonanywhere.com/api/v0/user/${{ secrets.PA_USERNAME }}/consoles/" \
               -H "Authorization: Token ${{ secrets.PA_API_TOKEN }}" \
               -d 'executable=bash' | jq -r '.id')
           fi
 
-          # 2. Inject command using the CORRECT /send_input/ endpoint
+          # 2. Inject the deployment commands
           curl -s -f -X POST "https://www.pythonanywhere.com/api/v0/user/${{ secrets.PA_USERNAME }}/consoles/$CONSOLE_ID/send_input/" \
             -H "Authorization: Token ${{ secrets.PA_API_TOKEN }}" \
             --data-urlencode "input=cd ~/ciro_backend && git fetch --all && git reset --hard origin/main && python3 -m pip install --user -r requirements.txt && python3 manage.py migrate && exit\n"
 
-          # 3. Trigger the Web App Reload endpoint directly
+          # 3. FORCE GITHUB TO WAIT FOR THE COMMANDS TO FINISH
+          echo "Commands sent. Waiting 25 seconds for PythonAnywhere to process git pull and migrations..."
+          sleep 25
+
+          # 4. Trigger the Web App Reload
           curl -s -f -X POST "https://www.pythonanywhere.com/api/v0/user/${{ secrets.PA_USERNAME }}/webapps/ciro.pythonanywhere.com/reload/" \
             -H "Authorization: Token ${{ secrets.PA_API_TOKEN }}"
