@@ -158,10 +158,16 @@ def weather_view(request):
                     addresses = geo_data.get("addresses", [])
                     if addresses:
                         address = addresses[0].get("address", {})
-                        city = address.get("municipality") or address.get("localName") or address.get("countrySubdivision") or city_name or "Unknown Location"
+                        resolved_city = address.get("municipality") or address.get("localName") or address.get("countrySubdivision") or "Unknown Location"
                         country = address.get("country") or "Pakistan"
-                        location_name = city
-                        region_and_country = f"{city}, {country}"
+
+                        # Respect user-provided city_name if present; only fall back to TomTom
+                        if city_name:
+                            location_name = city_name
+                            region_and_country = f"{city_name}, {country}"
+                        else:
+                            location_name = resolved_city
+                            region_and_country = f"{resolved_city}, {country}"
             except Exception as e:
                 print(f"TomTom Reverse Geocoding failed: {e}")
 
