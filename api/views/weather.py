@@ -12,10 +12,6 @@ from api.services import (
     generate_ranked_queries
 )
 
-# ── TESTING CONFIGURATION ──
-# Set this to True to force the simulated backend outputs to trigger a crisis alert block.
-# Set to False to keep responses purely safe with dynamic random weather updates.
-SHOW_CRISIS_TEST = False
 
 def is_weather_unusual(current_data, previous_request, city_name=None):
     """
@@ -84,90 +80,7 @@ def weather_view(request):
         if not user_id or lat is None or lon is None:
             return JsonResponse({'error': 'user_id, latitude, and longitude are required'}, status=400)
 
-        # ── Dynamic Testing Mock Overrides ──────────────────────────
-        use_mock = data.get('use_mock', False)
-        force_crisis = data.get('force_crisis', False)
-        if use_mock:
-            import random
-            temperature_2m = round(random.uniform(35.0, 49.0), 1)
-            apparent_temperature = round(temperature_2m + random.uniform(-2.0, 3.0), 1)
-            relative_humidity_2m = random.randint(30, 85)
-            precipitation = round(random.uniform(0.0, 5.0), 1)
-            wind_speed_10m = round(random.uniform(5.0, 25.0), 1)
-            wind_gusts_10m = round(wind_speed_10m + random.uniform(2.0, 10.0), 1)
-            weather_code = random.choice([0, 1, 2, 3, 51, 61, 80])
-            aqi = random.randint(50, 180)
-            firms_fires_detected = random.randint(0, 3)
-            tomtom_incidents_count = random.randint(0, 4)
-
-            tomtom_incidents_summary = []
-            if tomtom_incidents_count > 0:
-                categories = ["Accident", "DangerousConditions", "RoadClosed", "Flooding"]
-                for i in range(tomtom_incidents_count):
-                    tomtom_incidents_summary.append({
-                        "category": random.choice(categories),
-                        "description": f"Simulated traffic obstacle near coordinates ({lat}, {lon})",
-                        "from": f"Street {random.randint(1, 10)}",
-                        "to": f"Road {random.randint(11, 20)}",
-                        "delay": random.choice(["Minor delay", "Moderate delay", "Major delay"])
-                    })
-
-            final_response = {
-                'status': 'success',
-                'environment': {
-                    'temperature_c':       temperature_2m,
-                    'feels_like_c':        apparent_temperature,
-                    'humidity_pct':        relative_humidity_2m,
-                    'precipitation_mm':    precipitation,
-                    'wind_speed_kmh':      wind_speed_10m,
-                    'wind_gusts_kmh':      wind_gusts_10m,
-                    'weather_code':        weather_code,
-                    'aqi':                 aqi,
-                    'active_fires_nearby': firms_fires_detected,
-                },
-                'traffic': {
-                    'incident_count': tomtom_incidents_count,
-                    'incidents':      tomtom_incidents_summary
-                }
-            }
-
-            if SHOW_CRISIS_TEST or force_crisis:
-                final_response['alert'] = {
-                    'type':          'heatwave',
-                    'severity':      'extreme',
-                    'confidence':    0.95,
-                    'title':         'Extreme Heatwave Alert',
-                    'details':       f'Critical meteorological alert: Simulated high temperature of {temperature_2m}°C detected in Gujrat. Citizens are advised to seek indoor shelter and remain hydrated.',
-                    'safety_advises':  [
-                        'Stay indoors during peak sunlight hours (11:00 AM - 4:00 PM).',
-                        'Consume sufficient fluids and wear loose, light-colored clothing.',
-                        'Avoid strenuous physical activities outdoors.'
-                    ],
-                    'help_resources':  [
-                        {'name': 'Rescue 1122', 'contact': '1122'},
-                        {'name': 'Police Emergency', 'contact': '15'},
-                        {'name': 'Edhi Ambulance', 'contact': '115'}
-                    ],
-                    'notification': {
-                        'type':  'extreme_weather',
-                        'title': 'Extreme Heatwave Alert',
-                        'body':  f'Dangerous temperature spike to {temperature_2m}°C detected! Avoid outdoor exposure.'
-                    },
-                    'top_posts': [
-                        {
-                            'platform': 'x',
-                            'url': 'https://x.com/search?q=gujrat+heatwave',
-                            'title': 'Heatwave peak temperature hits extreme record in Gujrat!'
-                        },
-                        {
-                            'platform': 'youtube',
-                            'url': 'https://youtube.com',
-                            'title': 'Live Report: Severe summer temperature spikes across Punjab'
-                        }
-                    ]
-                }
-
-            return JsonResponse(final_response, json_dumps_params={'ensure_ascii': False})
+        # Mock response bypass logic removed to ensure requests always pass through the actual AI engine.
 
         # ── Previous weather for this area ──────────────────────
         previous_request = None
@@ -330,13 +243,27 @@ def weather_view(request):
         )
 
         # ── Anomaly check ─────────────────────────────────────────
+        from django.conf import settings
+        debug_force_crisis = getattr(settings, 'DEBUG_FORCE_CRISIS_ANOMALY', False)
+
+        if debug_force_crisis:
+            # Overwrite current weather memory to guarantee it triggers an anomaly
+            current['temperature_2m'] = 48.5
+            current['apparent_temperature'] = 52.0
+            current['precipitation'] = 0.0
+            current['firms_fires_detected'] = 4
+
         anomaly_diff = is_weather_unusual(
             current, previous_request,
             city_name=city_name
         )
+
+        if debug_force_crisis and not anomaly_diff:
+            anomaly_diff = f"In {city_name or 'Gujrat'}, temperature rose dramatically to 48.5°C and 4 thermal anomalies/fires were detected."
+
         ai_response = None
 
-        if anomaly_diff and not force_crisis:
+        if anomaly_diff:
             # 1. Generate ranked search queries (best → worst, location-aware)
             ranked_queries = generate_ranked_queries(
                 anomaly_diff,
@@ -417,43 +344,8 @@ def weather_view(request):
             }
         }
 
-        # Alert block — only added when there is an actual crisis OR force_crisis is enabled
-        if force_crisis:
-            final_response['alert'] = {
-                'type':          'heatwave',
-                'severity':      'extreme',
-                'confidence':    0.95,
-                'title':         'Extreme Heatwave Alert',
-                'details':       f'Critical meteorological alert: Simulated high temperature of {current.get("temperature_2m", 49.0)}°C detected in Gujrat. Citizens are advised to seek indoor shelter and remain hydrated.',
-                'safety_advises':  [
-                    'Stay indoors during peak sunlight hours (11:00 AM - 4:00 PM).',
-                    'Consume sufficient fluids and wear loose, light-colored clothing.',
-                    'Avoid strenuous physical activities outdoors.'
-                ],
-                'help_resources':  [
-                    {'name': 'Rescue 1122', 'contact': '1122'},
-                    {'name': 'Police Emergency', 'contact': '15'},
-                    {'name': 'Edhi Ambulance', 'contact': '115'}
-                ],
-                'notification': {
-                    'type':  'extreme_weather',
-                    'title': 'Extreme Heatwave Alert',
-                    'body':  f'Dangerous temperature spike to {current.get("temperature_2m", 49.0)}°C detected! Avoid outdoor exposure.'
-                },
-                'top_posts': [
-                    {
-                        'platform': 'x',
-                        'url': 'https://x.com/search?q=gujrat+heatwave',
-                        'title': 'Heatwave peak temperature hits extreme record in Gujrat!'
-                    },
-                    {
-                        'platform': 'youtube',
-                        'url': 'https://youtube.com',
-                        'title': 'Live Report: Severe summer temperature spikes across Punjab'
-                    }
-                ]
-            }
-        elif ai_response and ai_response.get('type') != 'safe':
+        # Alert block — only added when there is an actual crisis returned from AI analysis
+        if ai_response and ai_response.get('type') != 'safe':
             notif = ai_response.get('notification_details', {})
             final_response['alert'] = {
                 'type':          ai_response.get('type'),
