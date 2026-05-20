@@ -24,13 +24,14 @@ jobs:
               -d 'executable=bash' | jq -r '.id')
           fi
 
-          # 2. Inject the deployment commands
+          # 2. Inject commands (USING JSON SO IT ACTUALLY HITS ENTER)
           curl -s -f -X POST "https://www.pythonanywhere.com/api/v0/user/${{ secrets.PA_USERNAME }}/consoles/$CONSOLE_ID/send_input/" \
             -H "Authorization: Token ${{ secrets.PA_API_TOKEN }}" \
-            --data-urlencode "input=cd ~/ciro_backend && git fetch --all && git reset --hard origin/main && python3 -m pip install --user -r requirements.txt && python3 manage.py migrate && exit\n"
+            -H "Content-Type: application/json" \
+            -d '{"input": "cd ~/ciro_backend && git fetch --all && git reset --hard origin/main && python3 -m pip install --user -r requirements.txt && python3 manage.py migrate && exit\n"}'
 
-          # 3. FORCE GITHUB TO WAIT FOR THE COMMANDS TO FINISH
-          echo "Commands sent. Waiting 25 seconds for PythonAnywhere to process git pull and migrations..."
+          # 3. Wait for the terminal to actually finish the execution
+          echo "Commands sent. Waiting 25 seconds for PythonAnywhere to process..."
           sleep 25
 
           # 4. Trigger the Web App Reload
