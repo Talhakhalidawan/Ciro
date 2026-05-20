@@ -15,22 +15,21 @@ jobs:
       - name: Force Clean Deploy via API Console
         run: |
           # 1. Ask PythonAnywhere for an active console ID or create a new one
-          CONSOLE_ID=$(curl -s -X GET "https://www.pythonanywhere.com/api/v0/user/${{ secrets.PA_USERNAME }}/consoles/" \
+          CONSOLE_ID=$(curl -s -f -X GET "https://www.pythonanywhere.com/api/v0/user/${{ secrets.PA_USERNAME }}/consoles/" \
             -H "Authorization: Token ${{ secrets.PA_API_TOKEN }}" | jq -r '.[0].id // empty')
           
           # If no console exists, create one
           if [ -z "$CONSOLE_ID" ]; then
-            CONSOLE_ID=$(curl -s -X POST "https://www.pythonanywhere.com/api/v0/user/${{ secrets.PA_USERNAME }}/consoles/" \
+            CONSOLE_ID=$(curl -s -f -X POST "https://www.pythonanywhere.com/api/v0/user/${{ secrets.PA_USERNAME }}/consoles/" \
               -H "Authorization: Token ${{ secrets.PA_API_TOKEN }}" \
               -d 'executable=bash' | jq -r '.id')
           fi
 
-          # 2. Safely inject a destructive hard-reset command string into that console session
-          # This wipes out untracked files/local database changes on the host before running the update
-          curl -s -X POST "https://www.pythonanywhere.com/api/v0/user/${{ secrets.PA_USERNAME }}/consoles/$CONSOLE_ID/input/" \
+          # 2. Inject command using the CORRECT /send_input/ endpoint
+          curl -s -f -X POST "https://www.pythonanywhere.com/api/v0/user/${{ secrets.PA_USERNAME }}/consoles/$CONSOLE_ID/send_input/" \
             -H "Authorization: Token ${{ secrets.PA_API_TOKEN }}" \
             --data-urlencode "input=cd ~/ciro_backend && git fetch --all && git reset --hard origin/main && python3 -m pip install --user -r requirements.txt && python3 manage.py migrate && exit\n"
 
           # 3. Trigger the Web App Reload endpoint directly
-          curl -s -X POST "https://www.pythonanywhere.com/api/v0/user/${{ secrets.PA_USERNAME }}/webapps/ciro.pythonanywhere.com/reload/" \
+          curl -s -f -X POST "https://www.pythonanywhere.com/api/v0/user/${{ secrets.PA_USERNAME }}/webapps/ciro.pythonanywhere.com/reload/" \
             -H "Authorization: Token ${{ secrets.PA_API_TOKEN }}"
