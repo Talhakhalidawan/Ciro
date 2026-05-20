@@ -292,15 +292,14 @@ def analyze_with_ai(
     prompt = f"""
 Anomaly: {weather_diff}
 {traffic_section}
-Post Candidates:
-{json.dumps(ai_candidates, ensure_ascii=False)}
+Candidates: {json.dumps(ai_candidates, ensure_ascii=False)}
 
 Task:
-Determine if there is a crisis (type: heatwave, heavy_rainfall, monsoon, flood, cold_wave, fog_smog, dust_storm, severe_wind, road_incident, wildfire, safe).
-Choose up to 3 most relevant post IDs from "Post Candidates" that confirm the event.
-Return ONLY this JSON (no extra text/markup):
+Analyze the anomaly and determine if a crisis exists. Note: consider regional geography (e.g., if there are no forests, fires are urban/agricultural).
+Select up to 3 relevant post IDs confirming the event.
+Return ONLY valid JSON:
 {{
-  "type": "heatwave|heavy_rainfall|monsoon|flood|cold_wave|fog_smog|dust_storm|severe_wind|road_incident|wildfire|safe",
+  "type": "heatwave|heavy_rainfall|monsoon|flood|cold_wave|fog_smog|dust_storm|severe_wind|road_incident|urban_fire|safe",
   "severity": "high|medium|low|none",
   "confidence": "high|medium|low",
   "title": "Short title",

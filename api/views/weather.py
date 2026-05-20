@@ -77,8 +77,8 @@ def weather_view(request):
         user_time = data.get('time')
         city_name = data.get('city_name')
 
-        location_name = city_name or "Gujrat"
-        region_and_country = "Gujrat, Pakistan"
+        location_name = city_name or "Unknown Location"
+        region_and_country = f"{location_name}, Pakistan"
 
         if not user_id or lat is None or lon is None:
             return JsonResponse({'error': 'user_id, latitude, and longitude are required'}, status=400)
@@ -158,7 +158,7 @@ def weather_view(request):
                     addresses = geo_data.get("addresses", [])
                     if addresses:
                         address = addresses[0].get("address", {})
-                        city = address.get("municipality") or address.get("localName") or address.get("countrySubdivision") or city_name or "Gujrat"
+                        city = address.get("municipality") or address.get("localName") or address.get("countrySubdivision") or city_name or "Unknown Location"
                         country = address.get("country") or "Pakistan"
                         location_name = city
                         region_and_country = f"{city}, {country}"
