@@ -341,8 +341,10 @@ def weather_view(request):
                 )
 
         # ── Build lean, mobile-ready response ─────────────────────
+        from django.conf import settings
         final_response = {
             'status': 'success',
+            'interval_minutes': getattr(settings, 'WEATHER_CHECK_INTERVAL_MINUTES', 30),
             'location_name': location_name,
             'region_and_country': region_and_country,
             # Core environmental snapshot

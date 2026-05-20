@@ -141,4 +141,7 @@ NASA_FIRMS_MAP_KEY = os.environ.get('NASA_FIRMS_MAP_KEY', None)
 MYTOMTOM_API_KEY = os.environ.get('MYTOMTOM_API_KEY', None)
 
 # Set this to True to force the simulated backend outputs to trigger a crisis alert block using the actual AI pipelines.
-DEBUG_FORCE_CRISIS_ANOMALY = True
+DEBUG_FORCE_CRISIS_ANOMALY = False
+
+# Check interval for mobile requests (in minutes)
+WEATHER_CHECK_INTERVAL_MINUTES = 30
