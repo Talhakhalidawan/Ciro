@@ -143,9 +143,22 @@ BLUESMINDS_API_KEY = os.environ.get('BLUESMINDS_API_KEY', None)
 MISTRAL_API_KEY = os.environ.get('MISTRAL_API_KEY', None)
 NASA_FIRMS_MAP_KEY = os.environ.get('NASA_FIRMS_MAP_KEY', None)
 MYTOMTOM_API_KEY = os.environ.get('MYTOMTOM_API_KEY', None)
+# === CIRO DEBUG FLAGS ===
 
-# Set this to True to force the simulated backend outputs to trigger a crisis alert block using the actual AI pipelines.
+# Return raw YouTube scraper results instead of running AI
+DEBUG_YT_MODE = False
+
+# Print the exact AI prompt to console before sending
+DEBUG_AI_PROMPT = False
+
+# Skip AI call and return a mock crisis response (saves API tokens)
+DEBUG_MOCK_AI = False
+
+# Force a weather anomaly summary to trigger the crisis path even if weather is safe
 DEBUG_FORCE_CRISIS_ANOMALY = False
 
-# Check interval for mobile requests (in minutes)
+# How often the app should check (minutes). Backend controls this.
 WEATHER_CHECK_INTERVAL_MINUTES = 30
+
+# Maximum hours ago a YouTube video can be uploaded to be considered for a crisis alert
+YOUTUBE_SCRAPE_MAX_HOURS_AGO = 5

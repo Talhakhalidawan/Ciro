@@ -3,67 +3,17 @@ import requests
 from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_POST
-from api.models import WeatherRequest, SearchLog, AIResponseLog
 from django.utils.dateparse import parse_datetime
-from concurrent.futures import ThreadPoolExecutor
+from api.models import WeatherRequest, SearchLog, AIResponseLog
 from api.services import (
-    smart_search_platform,
-    analyze_with_ai,
-    generate_ranked_queries
+    get_deep_youtube_details,
+    fetch_youtube_transcript,
+    build_single_ai_prompt,
+    parse_ai_crisis_response,
+    get_crisis_metadata,
+    log_step,
+    check_safe_zones
 )
-
-
-def is_weather_unusual(current_data, previous_request, city_name=None):
-    """
-    Checks if the current weather/environment is significantly different from the previous.
-    Returns a string detailing the difference if unusual, else None.
-    Thresholds:
-    - Temperature rise > 5 degrees C
-    - Rain for two consecutive readings (precipitation > 0)
-    - AQI jumped by more than 50 points
-    - NASA FIRMS thermal anomalies detected > 0
-    - TomTom road incidents (Accident/RoadClosed/Flooding etc.) detected > 0
-    """
-    if not previous_request:
-        return None
-
-    area_str = f"In {city_name}" if city_name else "In this area"
-
-    current_temp = current_data.get('temperature_2m', 0)
-    prev_temp = previous_request.temperature_2m or 0
-    if current_temp - prev_temp > 5:
-        return f"{area_str}, temperature rose from {prev_temp}°C to {current_temp}°C."
-
-    current_precip = current_data.get('precipitation', 0)
-    prev_precip = previous_request.precipitation or 0
-    if current_precip > 0 and prev_precip > 0:
-        return f"{area_str}, persistent rain detected across two consecutive readings: {prev_precip}mm and {current_precip}mm."
-
-    current_aqi = current_data.get('aqi', 0)
-    prev_aqi = previous_request.aqi or 0
-    if abs(current_aqi - prev_aqi) > 50:
-        return f"{area_str}, AQI jumped drastically from {prev_aqi} to {current_aqi}."
-
-    firms_fires = current_data.get('firms_fires_detected', 0)
-    if firms_fires > 0:
-        return f"{area_str}, NASA FIRMS detected {firms_fires} active thermal anomalies/fires nearby."
-
-    tomtom_count = current_data.get('tomtom_incidents_count', 0)
-    if tomtom_count > 0:
-        incidents = current_data.get('tomtom_incidents_summary', [])
-        # Build a concise summary of the most severe incidents (up to 3)
-        top_incidents = incidents[:3]
-        summaries = []
-        for inc in top_incidents:
-            cat = inc.get('category', '')
-            desc = inc.get('description', '')
-            delay = inc.get('delay', '')
-            parts = [p for p in [cat, desc, delay] if p]
-            summaries.append(", ".join(parts))
-        incidents_text = "; ".join(summaries) if summaries else f"{tomtom_count} incident(s)"
-        return f"{area_str}, TomTom detected {tomtom_count} active road incident(s): {incidents_text}."
-
-    return None
 
 
 @csrf_exempt
@@ -77,79 +27,69 @@ def weather_view(request):
         user_time = data.get('time')
         city_name = data.get('city_name')
 
+        log_step("API ROUTER", "Incoming Weather Request Received", {
+            "user_id": user_id, "latitude": lat, "longitude": lon,
+            "time": user_time, "city_name": city_name
+        })
+
         location_name = city_name or "Unknown Location"
         region_and_country = f"{location_name}, Pakistan"
 
         if not user_id or lat is None or lon is None:
             return JsonResponse({'error': 'user_id, latitude, and longitude are required'}, status=400)
 
-        # Mock response bypass logic removed to ensure requests always pass through the actual AI engine.
+        # ── Debug Flags ────────────────────────────────────────────
+        from django.conf import settings
+        debug_force_crisis = getattr(settings, 'DEBUG_FORCE_CRISIS_ANOMALY', False)
+        debug_yt_mode = getattr(settings, 'DEBUG_YT_MODE', False)
+        debug_ai_prompt = getattr(settings, 'DEBUG_AI_PROMPT', False)
+        debug_mock_ai = getattr(settings, 'DEBUG_MOCK_AI', False)
 
-        # ── Previous weather for this area ──────────────────────
-        previous_request = None
-        if city_name:
-            previous_request = WeatherRequest.objects.filter(
-                city_name=city_name
-            ).order_by('-created_at').first()
-        if not previous_request:
-            previous_request = WeatherRequest.objects.filter(
-                user_id=user_id
-            ).order_by('-created_at').first()
-
-        # ── Fetch current weather from Open‑Meteo ─────────────────
+        # ── Fetch current weather from Open‑Meteo ───────────────────
         url = "https://api.open-meteo.com/v1/forecast"
         params = {
-            "latitude": lat,
-            "longitude": lon,
+            "latitude": lat, "longitude": lon,
             "current": "temperature_2m,relative_humidity_2m,apparent_temperature,is_day,precipitation,rain,showers,snowfall,weather_code,cloud_cover,pressure_msl,surface_pressure,wind_speed_10m,wind_direction_10m,wind_gusts_10m",
             "timezone": "auto"
         }
-        response = requests.get(url, params=params)       # ← timeout increased
+        response = requests.get(url, params=params, timeout=15)
         if response.status_code != 200:
             return JsonResponse({'error': 'Failed to fetch weather data'}, status=502)
 
         weather_data = response.json()
         current = weather_data.get('current', {})
 
-        # ── Fetch AQI from Open‑Meteo Air Quality API ─────────────
+        # ── Fetch AQI ──────────────────────────────────────────────
         aqi = 0
         try:
             aqi_url = "https://air-quality-api.open-meteo.com/v1/air-quality"
-            aqi_params = {
-                "latitude": lat,
-                "longitude": lon,
-                "current": "us_aqi"
-            }
-            aqi_resp = requests.get(aqi_url, params=aqi_params)
+            aqi_resp = requests.get(aqi_url, params={"latitude": lat, "longitude": lon, "current": "us_aqi"}, timeout=10)
             if aqi_resp.status_code == 200:
                 aqi = aqi_resp.json().get('current', {}).get('us_aqi', 0)
         except Exception as e:
             print(f"Air quality fetch failed: {e}")
 
-        # ── Fetch Thermal Anomalies (Fires) from NASA FIRMS ───────
+        # ── Fetch NASA FIRMS ───────────────────────────────────────
         firms_fires_detected = 0
-        from django.conf import settings
         firms_key = getattr(settings, 'NASA_FIRMS_MAP_KEY', None)
         if firms_key:
             try:
-                # Bounding box roughly 11km x 11km around coordinate
                 lon_min, lat_min = lon - 0.1, lat - 0.1
                 lon_max, lat_max = lon + 0.1, lat + 0.1
                 firms_url = f"https://firms.modaps.eosdis.nasa.gov/api/area/csv/{firms_key}/VIIRS_SNPP_NRT/{lon_min},{lat_min},{lon_max},{lat_max}/1"
                 firms_resp = requests.get(firms_url, timeout=10)
                 if firms_resp.status_code == 200:
                     lines = firms_resp.text.strip().split("\n")
-                    if len(lines) > 1: # Header + data rows
+                    if len(lines) > 1:
                         firms_fires_detected = len(lines) - 1
             except Exception as e:
                 print(f"NASA FIRMS fetch failed: {e}")
 
-        # ── Fetch Road Incidents from TomTom Traffic API ──────────
+        # ── Fetch TomTom Traffic ───────────────────────────────────
         tomtom_incidents_count = 0
         tomtom_incidents_summary = []
         tomtom_key = getattr(settings, 'MYTOMTOM_API_KEY', None)
         if tomtom_key:
-            # ── Reverse Geocode Coordinates using TomTom Search API ──
             try:
                 geocode_url = f"https://api.tomtom.com/search/2/reverseGeocode/{lat},{lon}.json"
                 geocode_resp = requests.get(geocode_url, params={"key": tomtom_key}, timeout=5)
@@ -160,8 +100,6 @@ def weather_view(request):
                         address = addresses[0].get("address", {})
                         resolved_city = address.get("municipality") or address.get("localName") or address.get("countrySubdivision") or "Unknown Location"
                         country = address.get("country") or "Pakistan"
-
-                        # Respect user-provided city_name if present; only fall back to TomTom
                         if city_name:
                             location_name = city_name
                             region_and_country = f"{city_name}, {country}"
@@ -172,25 +110,14 @@ def weather_view(request):
                 print(f"TomTom Reverse Geocoding failed: {e}")
 
             try:
-                # Bounding box ~11km x 11km around coordinate (same as FIRMS)
                 tt_lon_min, tt_lat_min = lon - 0.1, lat - 0.1
                 tt_lon_max, tt_lat_max = lon + 0.1, lat + 0.1
                 bbox_str = f"{tt_lon_min},{tt_lat_min},{tt_lon_max},{tt_lat_max}"
-
-                # Fields we care about for the AI prompt
                 fields = "{incidents{type,properties{id,iconCategory,magnitudeOfDelay,events{description,iconCategory},from,to,roadNumbers,timeValidity}}}"
-
-                # Filter to incidents that matter: Accident, DangerousConditions, RoadClosed, LaneClosed, RoadWorks, Flooding
-                category_filter = "1,3,7,8,9,11"
-
                 tomtom_url = "https://api.tomtom.com/traffic/services/5/incidentDetails"
                 tomtom_params = {
-                    "key": tomtom_key,
-                    "bbox": bbox_str,
-                    "fields": fields,
-                    "language": "en-GB",
-                    "categoryFilter": category_filter,
-                    "timeValidityFilter": "present"
+                    "key": tomtom_key, "bbox": bbox_str, "fields": fields,
+                    "language": "en-GB", "categoryFilter": "1,3,7,8,9,11", "timeValidityFilter": "present"
                 }
                 tt_resp = requests.get(tomtom_url, params=tomtom_params, timeout=10)
                 if tt_resp.status_code == 200:
@@ -201,252 +128,208 @@ def weather_view(request):
                         props = inc.get("properties", {})
                         events = props.get("events", [])
                         desc = events[0].get("description", "") if events else ""
-                        category = props.get("iconCategory", "Unknown")
-                        from_road = props.get("from", "")
-                        to_road = props.get("to", "")
-                        delay = props.get("magnitudeOfDelay", 0)  # 0=unknown,1=minor,2=moderate,3=major,4=undefined
-                        delay_label = {0: "Unknown delay", 1: "Minor delay", 2: "Moderate delay", 3: "Major delay", 4: "Undefined delay"}.get(delay, "")
-                        summary_entry = {
-                            "category": category,
+                        delay = props.get("magnitudeOfDelay", 0)
+                        delay_label = {0: "Unknown", 1: "Minor", 2: "Moderate", 3: "Major", 4: "Undefined"}.get(delay, "")
+                        tomtom_incidents_summary.append({
+                            "category": props.get("iconCategory", "Unknown"),
                             "description": desc.replace("#", ""),
-                            "from": from_road,
-                            "to": to_road,
+                            "from": props.get("from", ""),
+                            "to": props.get("to", ""),
                             "delay": delay_label
-                        }
-                        tomtom_incidents_summary.append(summary_entry)
-                    print(f"TomTom: {tomtom_incidents_count} road incident(s) detected near {city_name or lat}")
-                else:
-                    print(f"TomTom API returned {tt_resp.status_code}: {tt_resp.text[:200]}")
+                        })
             except Exception as e:
                 print(f"TomTom traffic fetch failed: {e}")
 
-        # Allow mock overrides (for testing)
+        # Mock overrides
         mock_current = data.get('mock_current_weather')
         if mock_current:
             current.update(mock_current)
-            if 'aqi' in mock_current:
-                aqi = mock_current['aqi']
-            if 'firms_fires_detected' in mock_current:
-                firms_fires_detected = mock_current['firms_fires_detected']
-            if 'tomtom_incidents_count' in mock_current:
-                tomtom_incidents_count = mock_current['tomtom_incidents_count']
-            if 'tomtom_incidents_summary' in mock_current:
-                tomtom_incidents_summary = mock_current['tomtom_incidents_summary']
+            if 'aqi' in mock_current: aqi = mock_current['aqi']
+            if 'firms_fires_detected' in mock_current: firms_fires_detected = mock_current['firms_fires_detected']
+            if 'tomtom_incidents_count' in mock_current: tomtom_incidents_count = mock_current['tomtom_incidents_count']
+            if 'tomtom_incidents_summary' in mock_current: tomtom_incidents_summary = mock_current['tomtom_incidents_summary']
 
         current['aqi'] = aqi
         current['firms_fires_detected'] = firms_fires_detected
         current['tomtom_incidents_count'] = tomtom_incidents_count
         current['tomtom_incidents_summary'] = tomtom_incidents_summary
 
+        log_step("SENSOR DATA", "Environmental readings", {
+            "city": location_name, "temp": current.get('temperature_2m'),
+            "aqi": aqi, "fires": firms_fires_detected, "traffic": tomtom_incidents_count
+        })
+
         # ── Save to DB ────────────────────────────────────────────
         parsed_time = parse_datetime(user_time) if user_time else None
         new_request = WeatherRequest.objects.create(
-            user_id=user_id,
-            latitude=lat,
-            longitude=lon,
-            user_time=parsed_time,
-            city_name=city_name,
-            aqi=aqi,
-            firms_fires_detected=firms_fires_detected,
-            tomtom_incidents_count=tomtom_incidents_count,
-            tomtom_incidents_summary=tomtom_incidents_summary,
+            user_id=user_id, latitude=lat, longitude=lon, user_time=parsed_time,
+            city_name=city_name, aqi=aqi, firms_fires_detected=firms_fires_detected,
+            tomtom_incidents_count=tomtom_incidents_count, tomtom_incidents_summary=tomtom_incidents_summary,
             temperature_2m=current.get('temperature_2m'),
             relative_humidity_2m=current.get('relative_humidity_2m'),
             apparent_temperature=current.get('apparent_temperature'),
-            is_day=current.get('is_day'),
-            precipitation=current.get('precipitation'),
-            rain=current.get('rain'),
-            showers=current.get('showers'),
-            snowfall=current.get('snowfall'),
-            weather_code=current.get('weather_code'),
-            cloud_cover=current.get('cloud_cover'),
-            pressure_msl=current.get('pressure_msl'),
-            surface_pressure=current.get('surface_pressure'),
-            wind_speed_10m=current.get('wind_speed_10m'),
-            wind_direction_10m=current.get('wind_direction_10m'),
-            wind_gusts_10m=current.get('wind_gusts_10m'),
+            is_day=current.get('is_day'), precipitation=current.get('precipitation'),
+            rain=current.get('rain'), showers=current.get('showers'),
+            snowfall=current.get('snowfall'), weather_code=current.get('weather_code'),
+            cloud_cover=current.get('cloud_cover'), pressure_msl=current.get('pressure_msl'),
+            surface_pressure=current.get('surface_pressure'), wind_speed_10m=current.get('wind_speed_10m'),
+            wind_direction_10m=current.get('wind_direction_10m'), wind_gusts_10m=current.get('wind_gusts_10m'),
         )
 
-        # ── Check Admin Crisis Simulator ──────────────────────────
+        # ── Simulator Check ─────────────────────────────────────────
         from api.models import AdminCrisisScenario
-        
         simulated_crisis = None
         active_scenarios = AdminCrisisScenario.objects.filter(is_active=True)
         req_city = (city_name or "").lower().strip()
-        
         for scenario in active_scenarios:
             loc = scenario.location.lower().strip()
             if loc == 'all' or loc == req_city:
                 simulated_crisis = scenario.crisis_type
                 break
 
-        # ── Anomaly check ─────────────────────────────────────────
-        from django.conf import settings
-        debug_force_crisis = getattr(settings, 'DEBUG_FORCE_CRISIS_ANOMALY', False)
-
-        anomaly_diff = None
+        # ── Workflow Variables ─────────────────────────────────────
         ai_response = None
+        youtube_videos = []
+        static_query = f"{city_name} latest news"
 
         if simulated_crisis:
-            print(f"CRISIS SIMULATOR ACTIVE: {simulated_crisis} for location: {city_name}")
+            log_step("SIMULATOR", f"Active scenario: {simulated_crisis}")
             if simulated_crisis == 'heatwave':
                 current['temperature_2m'] = 48.5
-                ai_response = {
-                    'type': 'Heatwave', 'severity': 'high', 'confidence': 'high',
-                    'title': 'Extreme Heatwave Alert',
-                    'details': 'Temperatures have spiked significantly. Immediate risk of heatstroke.',
-                    'safety_advises': ['Stay indoors', 'Drink plenty of water', 'Avoid direct sunlight'],
-                    'help_resources': ['Emergency Rescue: 1122'],
-                    'notification_details': {'type': 'wildfire', 'title': 'CRITICAL: Heatwave Detected', 'body': 'Temperatures have reached dangerous levels in your area.'},
-                    'top_posts': []
-                }
+                ai_response = {'type': 'heatwave', 'severity': 'high', 'confidence': 'high',
+                    'title': 'Extreme Heatwave Alert', 'details': 'Temperatures have spiked significantly.', 'main_video_indices': []}
             elif simulated_crisis == 'fire':
                 firms_fires_detected = 5
                 current['firms_fires_detected'] = 5
-                ai_response = {
-                    'type': 'Fire', 'severity': 'critical', 'confidence': 'high',
-                    'title': 'Active Wildfire Warning',
-                    'details': 'Multiple active thermal anomalies detected nearby indicating a spreading wildfire.',
-                    'safety_advises': ['Evacuate if instructed', 'Close all windows', 'Wear N95 masks if outdoors'],
-                    'help_resources': ['Fire Brigade: 16', 'Emergency Rescue: 1122'],
-                    'notification_details': {'type': 'wildfire', 'title': 'CRITICAL: Wildfire Detected', 'body': 'Active fires detected near your location.'},
-                    'top_posts': []
-                }
+                ai_response = {'type': 'fire', 'severity': 'critical', 'confidence': 'high',
+                    'title': 'Active Wildfire Warning', 'details': 'Multiple thermal anomalies detected.', 'main_video_indices': []}
             elif simulated_crisis == 'road_accident':
                 tomtom_incidents_count = 2
                 current['tomtom_incidents_count'] = 2
-                current['tomtom_incidents_summary'] = [
-                    {"category": "RoadClosed", "description": "Road closed due to multi-vehicle crash", "from": "Main Blvd", "to": "Highway", "delay": "Major delay"}
-                ]
-                ai_response = {
-                    'type': 'Road Accident', 'severity': 'medium', 'confidence': 'high',
-                    'title': 'Major Road Accident / Closure',
-                    'details': 'A severe multi-vehicle accident has closed major routes nearby.',
-                    'safety_advises': ['Use alternative routes', 'Expect severe delays'],
-                    'help_resources': ['Highway Police: 130'],
-                    'notification_details': {'type': 'storm', 'title': 'ALERT: Major Accident', 'body': 'Road closed due to crash.'},
-                    'top_posts': []
-                }
+                ai_response = {'type': 'road_incident', 'severity': 'medium', 'confidence': 'high',
+                    'title': 'Major Road Accident', 'details': 'Severe accident closed major routes.', 'main_video_indices': []}
             elif simulated_crisis == 'safe_response':
-                ai_response = {'type': 'safe'}
-                
+                ai_response = {'type': 'safe', 'severity': 'none', 'confidence': 'high',
+                    'title': 'All Clear', 'details': 'No incidents detected.', 'main_video_indices': []}
         else:
-            anomaly_diff = is_weather_unusual(
-                current, previous_request,
-                city_name=city_name
-            )
+            # ── REAL WORKFLOW ───────────────────────────────────────
+            weather_issue_summary = check_safe_zones(current, firms_fires_detected, tomtom_incidents_count)
+            log_step("SAFE ZONES", weather_issue_summary or "Weather is SAFE")
 
             if debug_force_crisis:
-                anomaly_diff = f"In {city_name or 'Gujrat'}, temperature rose dramatically to 48.5°C and 4 thermal anomalies/fires were detected."
+                weather_issue_summary = f"In {city_name or 'Gujrat'}, temperature rose to 48.5°C and fires detected."
 
-            if anomaly_diff:
-                # 1. Generate ranked search queries (best → worst, location-aware)
-                ranked_queries = generate_ranked_queries(
-                    anomaly_diff,
-                    city=city_name
-                )
-                print(f"Ranked queries ({len(ranked_queries)}): {ranked_queries}")
+            # 1. YouTube Scrape
+            youtube_videos = get_deep_youtube_details(static_query, max_results=4)
+            
+            if debug_yt_mode:
+                return JsonResponse({
+                    "debug_mode": True, "query": static_query,
+                    "results": youtube_videos, "weather_issues": weather_issue_summary
+                })
 
-                # Log keywords to DB
-                from api.models import AnomalyKeywordLog
-                AnomalyKeywordLog.objects.create(
+            SearchLog.objects.create(
+                weather_request=new_request, platform="youtube_scraper",
+                query=static_query, results=youtube_videos
+            )
+
+            # 2. Fetch transcripts (max 2 videos, ≤3 min only)
+            transcripts_fetched = 0
+            for v in youtube_videos:
+                if transcripts_fetched >= 2:
+                    break
+                if 0 < v['duration_sec'] <= 180:
+                    v['transcript'] = fetch_youtube_transcript(v['video_id'])
+                    transcripts_fetched += 1
+                else:
+                    v['transcript'] = "(Skipped - >3 min or live)"
+
+            # 3. SINGLE AI CALL
+            if youtube_videos or weather_issue_summary:
+                prompt = build_single_ai_prompt(city_name, weather_issue_summary, youtube_videos)
+                
+                if debug_ai_prompt:
+                    log_step("DEBUG", "AI Prompt", prompt)
+
+                if debug_mock_ai:
+                    ai_raw = json.dumps({
+                        "type": "fire", "severity": "high", "confidence": "high",
+                        "title": "Mock: Fire Detected", "details": "Mock AI for testing.",
+                        "main_video_indices": [0] if youtube_videos else []
+                    })
+                else:
+                    from api.ai import ask_ai
+                    ai_raw = ask_ai(prompt, response_json=False)
+                
+                ai_response = parse_ai_crisis_response(ai_raw)
+                
+                AIResponseLog.objects.create(
                     weather_request=new_request,
-                    keywords_english=ranked_queries,
-                    keywords_roman_urdu=[]
+                    prompt=prompt[:2000],
+                    response_json=ai_response
                 )
+            else:
+                ai_response = {'type': 'safe', 'severity': 'none', 'confidence': 'high',
+                    'title': 'All Clear', 'details': 'No incidents detected.', 'main_video_indices': []}
 
-                # 2. Per-platform smart search: try ranked queries in order
-                #    until useful results are found or list is exhausted.
-                #    Run all 4 platforms in parallel for speed.
-                platforms = ["youtube", "x", "facebook", "tiktok"]
-                search_results_dict = {}   # platform -> {query_used, results}
-
-                with ThreadPoolExecutor(max_workers=4) as executor:
-                    futures = {
-                        executor.submit(smart_search_platform, p, ranked_queries): p
-                        for p in platforms
-                    }
-                    for future in futures:
-                        platform = futures[future]
-                        try:
-                            res = future.result()
-                            search_results_dict[platform] = {
-                                "query_used": res["query_used"],
-                                "results":    res["results"]
-                            }
-                            SearchLog.objects.create(
-                                weather_request=new_request,
-                                platform=platform,
-                                query=res["query_used"],
-                                results=res["results"]
-                            )
-                        except Exception as e:
-                            print(f"Search failed for {platform}: {e}")
-                            search_results_dict[platform] = {"query_used": "", "results": []}
-
-                # 3. Send to AI for analysis + top_posts selection
-                ai_data = analyze_with_ai(
-                    anomaly_diff,
-                    search_results_dict,
-                    traffic_incidents=tomtom_incidents_summary or None
-                )
-                if "error" not in ai_data:
-                    ai_response = ai_data["response_json"]
-                    AIResponseLog.objects.create(
-                        weather_request=new_request,
-                        prompt=ai_data["prompt"],
-                        response_json=ai_response
-                    )
-
-        # ── Build lean, mobile-ready response ─────────────────────
-        from django.conf import settings
+        # ── Build Response ──────────────────────────────────────────
         final_response = {
             'status': 'success',
             'interval_minutes': getattr(settings, 'WEATHER_CHECK_INTERVAL_MINUTES', 30),
             'location_name': location_name,
             'region_and_country': region_and_country,
-            # Core environmental snapshot
             'environment': {
-                'temperature_c':       current.get('temperature_2m'),
-                'feels_like_c':        current.get('apparent_temperature'),
-                'humidity_pct':        current.get('relative_humidity_2m'),
-                'precipitation_mm':    current.get('precipitation'),
-                'wind_speed_kmh':      current.get('wind_speed_10m'),
-                'wind_gusts_kmh':      current.get('wind_gusts_10m'),
-                'weather_code':        current.get('weather_code'),
-                'aqi':                 aqi,
+                'temperature_c': current.get('temperature_2m'),
+                'feels_like_c': current.get('apparent_temperature'),
+                'humidity_pct': current.get('relative_humidity_2m'),
+                'precipitation_mm': current.get('precipitation'),
+                'wind_speed_kmh': current.get('wind_speed_10m'),
+                'wind_gusts_kmh': current.get('wind_gusts_10m'),
+                'weather_code': current.get('weather_code'),
+                'aqi': aqi,
                 'active_fires_nearby': firms_fires_detected,
             },
-            # Road incidents (always present so app can show live traffic)
             'traffic': {
                 'incident_count': tomtom_incidents_count,
-                'incidents':      tomtom_incidents_summary
+                'incidents': tomtom_incidents_summary
             }
         }
 
-        # Alert block — only added when there is an actual crisis returned from AI analysis
+        # Attach alert if crisis
         if ai_response and ai_response.get('type') != 'safe':
-            notif = ai_response.get('notification_details', {})
+            crisis_type = ai_response.get('type', 'safe')
+            metadata = get_crisis_metadata(crisis_type)
+            
+            # Build top_posts from main_video_indices
+            top_posts = []
+            for idx in ai_response.get('main_video_indices', []):
+                if 0 <= idx < len(youtube_videos):
+                    v = youtube_videos[idx]
+                    top_posts.append({"title": v['title'], "snippet": v['snippet'], "url": v['url']})
+            
             final_response['alert'] = {
-                'type':          ai_response.get('type'),
-                'severity':      ai_response.get('severity'),
-                'confidence':    ai_response.get('confidence'),
-                'title':         ai_response.get('title'),
-                'details':       ai_response.get('details'),
-                'safety_advises':  ai_response.get('safety_advises', []),
-                'help_resources':  ai_response.get('help_resources', []),
-                'notification': {
-                    'type':  notif.get('type', 'weather_alert'),
-                    'title': notif.get('title', ''),
-                    'body':  notif.get('body', notif.get('details', ''))
-                },
-                'top_posts': ai_response.get('top_posts', [])
+                'type': crisis_type,
+                'severity': ai_response.get('severity', 'medium'),
+                'confidence': ai_response.get('confidence', 'low'),
+                'title': ai_response.get('title', 'Alert'),
+                'details': ai_response.get('details', 'An incident has been detected.'),
+                'safety_advises': metadata['safety_advises'],
+                'help_resources': metadata['help_resources'],
+                'notification': metadata['notification'],
+                'top_posts': [{
+                    "platform": "youtube",
+                    "query": static_query,
+                    "items": top_posts
+                }] if top_posts else []
             }
+            log_step("ALERT", "Crisis payload attached", final_response['alert'])
+        else:
+            log_step("ALERT", "Safe payload returned")
 
         return JsonResponse(final_response, json_dumps_params={'ensure_ascii': False})
 
     except json.JSONDecodeError:
         return JsonResponse({'error': 'Invalid JSON'}, status=400)
     except Exception as e:
-        print(f"Exception in weather_view: {e}")
+        log_step("API ERROR", f"Critical exception: {e}")
         return JsonResponse({'error': str(e)}, status=500)
