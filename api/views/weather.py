@@ -267,78 +267,136 @@ def weather_view(request):
             wind_gusts_10m=current.get('wind_gusts_10m'),
         )
 
+        # ── Check Admin Crisis Simulator ──────────────────────────
+        from api.models import AdminCrisisScenario
+        
+        simulated_crisis = None
+        active_scenarios = AdminCrisisScenario.objects.filter(is_active=True)
+        req_city = (city_name or "").lower().strip()
+        
+        for scenario in active_scenarios:
+            loc = scenario.location.lower().strip()
+            if loc == 'all' or loc == req_city:
+                simulated_crisis = scenario.crisis_type
+                break
+
         # ── Anomaly check ─────────────────────────────────────────
         from django.conf import settings
         debug_force_crisis = getattr(settings, 'DEBUG_FORCE_CRISIS_ANOMALY', False)
 
-        anomaly_diff = is_weather_unusual(
-            current, previous_request,
-            city_name=city_name
-        )
-
-        if debug_force_crisis:
-            anomaly_diff = f"In {city_name or 'Gujrat'}, temperature rose dramatically to 48.5°C and 4 thermal anomalies/fires were detected."
-
+        anomaly_diff = None
         ai_response = None
 
-        if anomaly_diff:
-            # 1. Generate ranked search queries (best → worst, location-aware)
-            ranked_queries = generate_ranked_queries(
-                anomaly_diff,
-                city=city_name
-            )
-            print(f"Ranked queries ({len(ranked_queries)}): {ranked_queries}")
-
-            # Log keywords to DB
-            from api.models import AnomalyKeywordLog
-            AnomalyKeywordLog.objects.create(
-                weather_request=new_request,
-                keywords_english=ranked_queries,
-                keywords_roman_urdu=[]
-            )
-
-            # 2. Per-platform smart search: try ranked queries in order
-            #    until useful results are found or list is exhausted.
-            #    Run all 4 platforms in parallel for speed.
-            platforms = ["youtube", "x", "facebook", "tiktok"]
-            search_results_dict = {}   # platform -> {query_used, results}
-
-            with ThreadPoolExecutor(max_workers=4) as executor:
-                futures = {
-                    executor.submit(smart_search_platform, p, ranked_queries): p
-                    for p in platforms
+        if simulated_crisis:
+            print(f"CRISIS SIMULATOR ACTIVE: {simulated_crisis} for location: {city_name}")
+            if simulated_crisis == 'heatwave':
+                current['temperature_2m'] = 48.5
+                ai_response = {
+                    'type': 'Heatwave', 'severity': 'high', 'confidence': 'high',
+                    'title': 'Extreme Heatwave Alert',
+                    'details': 'Temperatures have spiked significantly. Immediate risk of heatstroke.',
+                    'safety_advises': ['Stay indoors', 'Drink plenty of water', 'Avoid direct sunlight'],
+                    'help_resources': ['Emergency Rescue: 1122'],
+                    'notification_details': {'type': 'wildfire', 'title': 'CRITICAL: Heatwave Detected', 'body': 'Temperatures have reached dangerous levels in your area.'},
+                    'top_posts': []
                 }
-                for future in futures:
-                    platform = futures[future]
-                    try:
-                        res = future.result()
-                        search_results_dict[platform] = {
-                            "query_used": res["query_used"],
-                            "results":    res["results"]
-                        }
-                        SearchLog.objects.create(
-                            weather_request=new_request,
-                            platform=platform,
-                            query=res["query_used"],
-                            results=res["results"]
-                        )
-                    except Exception as e:
-                        print(f"Search failed for {platform}: {e}")
-                        search_results_dict[platform] = {"query_used": "", "results": []}
-
-            # 3. Send to AI for analysis + top_posts selection
-            ai_data = analyze_with_ai(
-                anomaly_diff,
-                search_results_dict,
-                traffic_incidents=tomtom_incidents_summary or None
+            elif simulated_crisis == 'fire':
+                firms_fires_detected = 5
+                current['firms_fires_detected'] = 5
+                ai_response = {
+                    'type': 'Fire', 'severity': 'critical', 'confidence': 'high',
+                    'title': 'Active Wildfire Warning',
+                    'details': 'Multiple active thermal anomalies detected nearby indicating a spreading wildfire.',
+                    'safety_advises': ['Evacuate if instructed', 'Close all windows', 'Wear N95 masks if outdoors'],
+                    'help_resources': ['Fire Brigade: 16', 'Emergency Rescue: 1122'],
+                    'notification_details': {'type': 'wildfire', 'title': 'CRITICAL: Wildfire Detected', 'body': 'Active fires detected near your location.'},
+                    'top_posts': []
+                }
+            elif simulated_crisis == 'road_accident':
+                tomtom_incidents_count = 2
+                current['tomtom_incidents_count'] = 2
+                current['tomtom_incidents_summary'] = [
+                    {"category": "RoadClosed", "description": "Road closed due to multi-vehicle crash", "from": "Main Blvd", "to": "Highway", "delay": "Major delay"}
+                ]
+                ai_response = {
+                    'type': 'Road Accident', 'severity': 'medium', 'confidence': 'high',
+                    'title': 'Major Road Accident / Closure',
+                    'details': 'A severe multi-vehicle accident has closed major routes nearby.',
+                    'safety_advises': ['Use alternative routes', 'Expect severe delays'],
+                    'help_resources': ['Highway Police: 130'],
+                    'notification_details': {'type': 'storm', 'title': 'ALERT: Major Accident', 'body': 'Road closed due to crash.'},
+                    'top_posts': []
+                }
+            elif simulated_crisis == 'safe_response':
+                ai_response = {'type': 'safe'}
+                
+        else:
+            anomaly_diff = is_weather_unusual(
+                current, previous_request,
+                city_name=city_name
             )
-            if "error" not in ai_data:
-                ai_response = ai_data["response_json"]
-                AIResponseLog.objects.create(
-                    weather_request=new_request,
-                    prompt=ai_data["prompt"],
-                    response_json=ai_response
+
+            if debug_force_crisis:
+                anomaly_diff = f"In {city_name or 'Gujrat'}, temperature rose dramatically to 48.5°C and 4 thermal anomalies/fires were detected."
+
+            if anomaly_diff:
+                # 1. Generate ranked search queries (best → worst, location-aware)
+                ranked_queries = generate_ranked_queries(
+                    anomaly_diff,
+                    city=city_name
                 )
+                print(f"Ranked queries ({len(ranked_queries)}): {ranked_queries}")
+
+                # Log keywords to DB
+                from api.models import AnomalyKeywordLog
+                AnomalyKeywordLog.objects.create(
+                    weather_request=new_request,
+                    keywords_english=ranked_queries,
+                    keywords_roman_urdu=[]
+                )
+
+                # 2. Per-platform smart search: try ranked queries in order
+                #    until useful results are found or list is exhausted.
+                #    Run all 4 platforms in parallel for speed.
+                platforms = ["youtube", "x", "facebook", "tiktok"]
+                search_results_dict = {}   # platform -> {query_used, results}
+
+                with ThreadPoolExecutor(max_workers=4) as executor:
+                    futures = {
+                        executor.submit(smart_search_platform, p, ranked_queries): p
+                        for p in platforms
+                    }
+                    for future in futures:
+                        platform = futures[future]
+                        try:
+                            res = future.result()
+                            search_results_dict[platform] = {
+                                "query_used": res["query_used"],
+                                "results":    res["results"]
+                            }
+                            SearchLog.objects.create(
+                                weather_request=new_request,
+                                platform=platform,
+                                query=res["query_used"],
+                                results=res["results"]
+                            )
+                        except Exception as e:
+                            print(f"Search failed for {platform}: {e}")
+                            search_results_dict[platform] = {"query_used": "", "results": []}
+
+                # 3. Send to AI for analysis + top_posts selection
+                ai_data = analyze_with_ai(
+                    anomaly_diff,
+                    search_results_dict,
+                    traffic_incidents=tomtom_incidents_summary or None
+                )
+                if "error" not in ai_data:
+                    ai_response = ai_data["response_json"]
+                    AIResponseLog.objects.create(
+                        weather_request=new_request,
+                        prompt=ai_data["prompt"],
+                        response_json=ai_response
+                    )
 
         # ── Build lean, mobile-ready response ─────────────────────
         from django.conf import settings

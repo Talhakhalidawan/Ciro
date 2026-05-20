@@ -56,3 +56,20 @@ class AnomalyKeywordLog(models.Model):
 
     def __str__(self):
         return f"Keywords for request {self.weather_request.id}"
+
+class AdminCrisisScenario(models.Model):
+    CRISIS_CHOICES = [
+        ('heatwave', 'Heatwave'),
+        ('fire', 'Fire'),
+        ('road_accident', 'Road Accident'),
+        ('safe_response', 'Safe Response')
+    ]
+
+    crisis_type = models.CharField(max_length=50, choices=CRISIS_CHOICES)
+    location = models.CharField(max_length=255, help_text="Enter city name (e.g. Islamabad), or 'all' to apply to all requests.")
+    is_active = models.BooleanField(default=True, help_text="Check to activate this simulated scenario.")
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        status = "ACTIVE" if self.is_active else "INACTIVE"
+        return f"[{status}] {self.get_crisis_type_display()} in {self.location}"
