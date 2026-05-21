@@ -179,12 +179,14 @@ def weather_view(request):
         # ── Simulator Check ─────────────────────────────────────────
         from api.models import AdminCrisisScenario
         simulated_crisis = None
+        active_scenario_obj = None
         active_scenarios = AdminCrisisScenario.objects.filter(is_active=True)
         req_city = (city_name or "").lower().strip()
         for scenario in active_scenarios:
             loc = scenario.location.lower().strip()
             if loc == 'all' or loc == req_city:
                 simulated_crisis = scenario.crisis_type
+                active_scenario_obj = scenario
                 break
 
         # ── Workflow Variables ─────────────────────────────────────
@@ -194,23 +196,39 @@ def weather_view(request):
 
         if simulated_crisis:
             log_step("SIMULATOR", f"Active scenario: {simulated_crisis}")
+            
+            # Use custom data if provided in admin
+            if active_scenario_obj and active_scenario_obj.custom_ai_response:
+                ai_response = active_scenario_obj.custom_ai_response
+            if active_scenario_obj and active_scenario_obj.custom_search_results:
+                youtube_videos = active_scenario_obj.custom_search_results
+
             if simulated_crisis == 'heatwave':
                 current['temperature_2m'] = 48.5
-                ai_response = {'type': 'heatwave', 'severity': 'high', 'confidence': 'high',
-                    'title': 'Extreme Heatwave Alert', 'details': 'Temperatures have spiked significantly.', 'main_video_indices': []}
+                if not ai_response:
+                    ai_response = {'type': 'heatwave', 'severity': 'high', 'confidence': 'high',
+                        'title': 'Extreme Heatwave Alert', 'details': 'Temperatures have spiked significantly.', 'main_video_indices': []}
             elif simulated_crisis == 'fire':
                 firms_fires_detected = 5
                 current['firms_fires_detected'] = 5
-                ai_response = {'type': 'fire', 'severity': 'critical', 'confidence': 'high',
-                    'title': 'Active Wildfire Warning', 'details': 'Multiple thermal anomalies detected.', 'main_video_indices': []}
+                if not ai_response:
+                    ai_response = {'type': 'fire', 'severity': 'critical', 'confidence': 'high',
+                        'title': 'Active Wildfire Warning', 'details': 'Multiple thermal anomalies detected.', 'main_video_indices': []}
+            elif simulated_crisis == 'mandi_bahauddin_fire':
+                if not ai_response:
+                    ai_response = {"type": "fire", "severity": "high", "confidence": "high", "title": "Massive Fire in Mandi Bahauddin Plaza", "details": "A massive fire has erupted in a 5-storey plaza in Mandi Bahauddin, causing extensive damage and reducing millions worth of goods to ashes.", "main_video_indices": [0, 1, 2]}
+                if not youtube_videos:
+                    youtube_videos = [{"video_id": "SSd1kpZPR6Q", "title": "Massive Fire Breaks Out in Plaza in Mandi Bahauddin | Millions Worth of Goods Reduced to Ashes", "url": "https://www.youtube.com/watch?v=SSd1kpZPR6Q", "published_time": "9 hours ago", "duration_text": "5:03", "duration_sec": 303, "snippet": "Massive Fire Breaks Out in Plaza in Mandi Bahauddin | Millions Worth of Goods Reduced to Ashes | Breaking News | News Alert\u00a0..."}, {"video_id": "wGMFdJawMEg", "title": "Massive Fire Erupts in 5-Storey Plaza in Mandi Bahauddin | Breaking News | Dawn News", "url": "https://www.youtube.com/watch?v=wGMFdJawMEg", "published_time": "10 hours ago", "duration_text": "1:13", "duration_sec": 73, "snippet": "Watch Dawn News Live Stream: https://www.youtube.com/watch?v=4C_dWCtpYdE Massive Fire Erupts in 5-Storey Plaza in\u00a0..."}, {"video_id": "3ASkMhf2R8Y", "title": "Massive Fire Breaks Out in Mandi Bahauddin | Breaking News | 92NewsHD", "url": "https://www.youtube.com/watch?v=3ASkMhf2R8Y", "published_time": "9 hours ago", "duration_text": "0:58", "duration_sec": 58, "snippet": "Massive Fire Breaks Out in Mandi Bahauddin | Breaking News | 92NewsHD 92NewsHD Live, Pakistan's first HD Plus news\u00a0..."}]
             elif simulated_crisis == 'road_accident':
                 tomtom_incidents_count = 2
                 current['tomtom_incidents_count'] = 2
-                ai_response = {'type': 'road_incident', 'severity': 'medium', 'confidence': 'high',
-                    'title': 'Major Road Accident', 'details': 'Severe accident closed major routes.', 'main_video_indices': []}
+                if not ai_response:
+                    ai_response = {'type': 'road_incident', 'severity': 'medium', 'confidence': 'high',
+                        'title': 'Major Road Accident', 'details': 'Severe accident closed major routes.', 'main_video_indices': []}
             elif simulated_crisis == 'safe_response':
-                ai_response = {'type': 'safe', 'severity': 'none', 'confidence': 'high',
-                    'title': 'All Clear', 'details': 'No incidents detected.', 'main_video_indices': []}
+                if not ai_response:
+                    ai_response = {'type': 'safe', 'severity': 'none', 'confidence': 'high',
+                        'title': 'All Clear', 'details': 'No incidents detected.', 'main_video_indices': []}
         else:
             # ── REAL WORKFLOW ───────────────────────────────────────
             weather_issue_summary = check_safe_zones(current, firms_fires_detected, tomtom_incidents_count)

@@ -7,6 +7,16 @@ class AdminCrisisScenarioAdmin(admin.ModelAdmin):
     list_display = ('crisis_type', 'location', 'is_active', 'created_at')
     list_filter = ('is_active', 'crisis_type')
     search_fields = ('location',)
+    fieldsets = (
+        (None, {
+            'fields': ('crisis_type', 'location', 'is_active')
+        }),
+        ('Custom Static Data (Overrides AI)', {
+            'classes': ('collapse',),
+            'fields': ('custom_ai_response', 'custom_search_results'),
+            'description': "If filled, these will be used instead of AI/Real search results."
+        }),
+    )
 
 class CommunityIncidentAdmin(admin.ModelAdmin):
     list_display = ('title', 'incident_type', 'user_id', 'latitude', 'longitude', 'is_active', 'created_at')

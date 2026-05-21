@@ -62,12 +62,15 @@ class AdminCrisisScenario(models.Model):
         ('heatwave', 'Heatwave'),
         ('fire', 'Fire'),
         ('road_accident', 'Road Accident'),
+        ('mandi_bahauddin_fire', 'Mandi Bahauddin Fire (Static)'),
         ('safe_response', 'Safe Response')
     ]
 
     crisis_type = models.CharField(max_length=50, choices=CRISIS_CHOICES)
     location = models.CharField(max_length=255, help_text="Enter city name (e.g. Islamabad), or 'all' to apply to all requests.")
     is_active = models.BooleanField(default=True, help_text="Check to activate this simulated scenario.")
+    custom_ai_response = models.JSONField(null=True, blank=True, help_text="Custom AI JSON response for this scenario.")
+    custom_search_results = models.JSONField(null=True, blank=True, help_text="Custom Search results for this scenario.")
     created_at = models.DateTimeField(auto_now_add=True)
 
     def __str__(self):
